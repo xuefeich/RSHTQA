@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+        <meta charset="utf-8">
+        <meta name="renderer" content="webkit">
+        <link rel="icon" sizes="192x192" href="assets/next.jpeg">
+        <title>TAT-HQA: Hypothetical QA over Tabular&Textual Content</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="TAT-HQA: A Hypothetical
+Question Answering (HQA) Benchmark on a Hybrid of Tabular and Textual Content in Finance">
+        <meta name="author" content="Li Moxin, Fuli Feng">
+        <link href="styles/bootstrap.min.css" rel="stylesheet">
+        <link href="styles/common.css" rel="stylesheet">
+    </head>
+
+    <body data-spy="scroll" data-target=".navbar">
+        <nav class="navbar navbar-default navbar-fixed-top">
+            <div class="container">
+                <!-- Brand and toggle get grouped for better mobile display -->
+                <div class="navbar-header">
+                    <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar-collapse" aria-expanded="false">
+                        <span class="sr-only">Toggle navigation</span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                    </button>
+                    <h2 class="navbar-brand hidden-xs hidden-sm">
+                        <span class="logo">TAT-HQA</span>
+                        <span class="description">Hypothetical QA over Tabular&Textual Content</span>
+                    </h2>
+
+                    <h2 class="navbar-brand hidden-md hidden-lg">
+                        <span class="logo">TAT-HQA</span>
+                    </h2>
+                </div>
+
+                <div class="collapse navbar-collapse" id="navbar-collapse">
+                    <ul class="nav navbar-nav navbar-right">
+                        <li><a class="page-scroll" href="#introduction">Introduction</a></li>
+                        <li><a class="page-scroll" href="#start">Getting Started</a></li>
+                        <li><a class="page-scroll" href="#leaderboard">Leaderboard</a></li>
+                        <li><a class="page-scroll" href="#submission">Submission</a></li>
+                        <li><a class="page-scroll" href="#contact">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <!-- linked this part-->
+        <section id="introduction" class="scrollable-section">
+            <div class="container">
+                <h3>Introduction</h3>
+                <p>
+                    <b>TAT-HQA</b> (<b>T</b>abular <b>A</b>nd <b>T</b>extual dataset for <b>H</b>ypothetical <b>Q</b>uestion <b>A</b>nswering) is a numerical QA dataset with hypothetical questions, i.e. questions containing an assumption beyond the original context. TAT-HQA aims to enable QA model the counterfactual thinking ability to imagine and reason over unseen cases based on the seen facts and counterfactual assumptions.
+                </p>
+                <p>TAT-HQA has the following features in addition to the features of TAT-QA:</p>
+
+                <ul>
+                    <li> The question is <ins>modified from TAT-QA</ins> by adding an ssumption which describes a counterfactual situation (e.g. “if the amount in 2019 was $132,935 thousand instead). Each hypothetical question can find one original question from TAT-QA with the same tabular and textual context. </li>
+                    <li> The assumption may involve various <ins>discrete computation</ins>, e.g. addition, multiplication, percentage increase/decrease. During annotation, the calculation involved and the phrasing of the assumption are not restricted to certain types. </li>
+                </ul>
+                <p>
+                    In total, TAT-HQA contains <b>8,283</b> questions associated with <b>2,758</b> hybrid contexts from real-world financial reports.
+               </p>
+                <p>
+                    The following is an example of TAT-HQA along with its original TAT-QA example. The left box shows a factual tabular and textual context, where a <ins>normal question</ins> (the upper middle box) is asked. Based on the normal question, a <ins>hypothetical question</ins> is asked with an additional assumption <ins>"if the amount in 2019 was $132,935 instead"</ins>, leading to a different answer (-30,000 vs. -29,253). The blue dashed boxes indicate the position that the assumption affects. The QA model is supposed to imagine a counterfactual context (the right dashed box) and reason over this imagined situation.  
+                </p>
+                <img src="assets/example_hqa.png" alt="TAT-HQA Sample" width="100%" >
+                    <br>
+
+                For more information, please read our ACL 2022 paper  <a href="https://aclanthology.org/2022.acl-long.5.pdf" target="_blank">[PDF]</a>.
+            </div>
+        </section>
+
+        <section id="start" class="scrollable-section">
+            <div class="container">
+                <h3>Getting Started</h3>
+                <ul>
+                    <li> <b>Download a copy of the dataset from our</b> <a href="https://https://github.com/NExTplusplus/TAT-HQA" target="_blank">Github Repo</a>. Please refer to a detailed dataset file discription in the Repo. </li>
+                    <li> The training and validation data of a mixture of TAT-QA and TAT-HQA is stored in <ins>dataset_raw</ins> with the following format. The data format is nearly identical to TAT-QA, with one additional key for hypothetical questions "<b>rel_question</b>" to mark the corresponding original question under the same table. </li>
+                    <li> To implement the paper method, i.e. the Learning-to-Imagine module, we generate some extra fields for TAT-HQA, such as the operator and the operands regarding the assumption. The data with extra fields is stored in <ins>dataset_extra_field</ins>, where TAT-QA and TAT-HQA are splitted and stored in two folders.  </li>
+                    <li> The testing data of TAT-HQA is stored in <ins>dataset_test_hqa/tathqa_dataset_dev.json</ins>. This json file contains no answer and is used for prediction to the leaderboard. </li>
+                </ul>
+
+<pre>
+{
+  "table": {                                                          
+    "uid": "a3e9cad512b8d3ff0cd6e50774007eeb",                        
+    "table": [                                                         
+      [
+        "(In thousands of $)",
+        "2019",
+        "2018",
+      ],
+      [
+        "Net Debt Receipts",
+        "$  243,513",
+        "$   30,300",
+      ],
+      ...
+    ]
+  },
+  "paragraphs": [                                                        
+    {
+      "uid": "76573d23233ebdfc3c89609c6372e951",                    
+      "order": 1,                                                        
+      "text": "The most significant impacts of Hilli LLC VIE's 
+               operations on our consolidated statements of income and 
+               consolidated statements of cash flows, as of December 31,
+               2019 and 2018, are as follows: ..."
+    },
+    ...
+  ],
+  "questions": [                                         <em class="comment"># Examples of 1) an original question and 2) a hypothetical question. </em>                                        
+    {
+      "uid": "b68356a11ee8d39571d44b087b1558c7",                                
+      "order": 1,                                                        
+      "question": "What was the change in net debt receipts between 2018 and 2019?",     
+      "answer": 129,454,                                                  
+      "derivation": "129,454 - 0",                                      
+      "answer_type": "arithmetic",                       <em class="comment"># The answer type including `span`, `spans`, `arithmetic`, `counting` and `counterfactual`.</em>
+      "answer_from": "table",                            <em class="comment"># The source of the answer including `table`, `table` and `table-text`</em>
+      "rel_paragraphs": [                                                
+      ],
+      "req_comparison": false,                                           
+      "scale": "thousand"                                <em class="comment"># The scale of the answer including `None`, `thousand`, `million`, `billion` and `percent`</em>
+    }
+    {
+      "uid": "e982f2be72b37a222d61fe645df00168",                     
+      "order": 2,                                                        
+      "question": "What would be the change in net debt receipts between 2018 and 2019 if the amount in 2018 was 100,250 thousand instead?",     
+      "answer": 29,204,                                                  
+      "derivation": "129,454 - 100,250",                                      
+      "answer_type": "arithmetic",                                      
+      "answer_from": "table",                                           
+      "rel_paragraphs": [                                                
+      ],
+      "req_comparison": false,                                           
+      "scale": "thousand"                                                
+      "rel_question": 1                                  <em class="comment"># The order of the corresponding original question under the same table. </em>
+    }
+  ]
+}
+</pre>
+
+            </div>
+        </section>
+
+        <section id="leaderboard" class="scrollable-section">
+            <div style="background-color: #e8e8e8">
+                <div class="container">
+                    <h3>Leaderboard</h3>
+
+                    <div class="table-responsive">
+                    <table class="table well">
+                        <thead class="thead-dark">
+
+                        <tr>
+                            <th>Rank</th>
+                            <th>Model Name</th>
+                            <th>Team Name</th>
+                            <th>Exact Match</th>
+                            <th>F1</th>
+                            <th>Created</th>
+                        </tr>
+                        </thead>
+
+                        <tbody>
+                        <tr>
+                            <td>-</td>
+                            <td>Human Performance</td>
+                            <td>-</td>
+                            <td>84.1</td>
+                            <td>90.8</td>
+                            <td>-</td>
+                        </tr>
+                        
+                        <tr>
+                            <td>1</td>
+                            <td><a href="https://github.com/NExTplusplus/tat-hqa" target="_blank">TagOp - L2I</a></td>
+                            <td>NExT</td>
+                            <td>---</td>
+                            <td>---</td>
+                            <td>13 May 2022</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section id="submission" class="scrollable-section">
+            <div class="container">
+                <h3>Submission</h3>
+                <p>
+                To evaluate your models, we have also made available the official evaluation script,
+                To run the evaluation, use
+                </p>
+                <pre>python evaluate.py gold_data_path.json prediction_result_path.json 0</pre>
+
+                <h4>Predictions Format</h4>
+                <p> The predictions file in JSON format contains a dictionary with question ids as keys and the predictions as values
+                    (each prediction shall include both `answer` and `scale` in an array). For example,
+                </p>
+                <pre>
+{
+ "9337c3e6-c53f-45a9-836a-02c474ceac16": [
+    "4.6",
+    "percent"
+  ],
+  "c4170232-e89c-487a-97c5-afad45e9d702": [
+    "16",
+    "thousand"
+  ],
+  "d81d1ae7-363c-4b47-8eea-1906fef33856": [
+    ["2018", "2019"],
+    ""
+  ]
+  ...
+}
+</pre>
+                <p>The format of <a href="https://github.com/NExTplusplus/tat-qa/blob/master/sample_prediction.json" target="_blank" >sample prediction file </a> of TAT-QA is also suitable for TAT-HQA.</p>
+                <h4>Submission</h4>
+                <p>
+                    Please email the prediction file of the test set with the following information to us:
+                    <ul>
+                        <li>Model name with a brief description of your model</li>
+                        <li>Paper title & link (if any)</li>
+                        <li>Team name</li>
+                        <li>Contact person</li>
+                        <li>Email of the contact person</li>
+                    </ul>
+                </p>
+                <p>
+                Please give us up to two weeks to evaluate your submission and we will add your model to the leaderboard.
+                </p>
+            </div>
+        </section>
+
+        <section id="contact" class="scrollable-section">
+            <div class="container">
+                <h3>Contact</h3>
+                <p>
+                    For more information, please contact:
+                    <ul>
+                        <li>Moxin LI<a href="mailto:limoxin@u.nus.edu">limoxin@u.nus.edu</a></li>
+                        <li>Fuli FENG <a href="mailto:fulifeng93@gmail.com">fulifeng93@gmail.com</a></li>
+                    </ul>
+                </p>
+                <p>
+                    Please kindly cite our work if the dataset helps your research.
+                </p>
+<pre>
+
+@inproceedings{li-etal-2022-learning,
+    title = "Learning to Imagine: Integrating Counterfactual Thinking in Neural Discrete Reasoning",
+    author = "Li, Moxin  and
+      Feng, Fuli  and
+      Zhang, Hanwang  and
+      He, Xiangnan  and
+      Zhu, Fengbin  and
+      Chua, Tat-Seng",
+    booktitle = "Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)",
+    month = may,
+    year = "2022",
+    address = "Dublin, Ireland",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2022.acl-long.5",
+    doi = "10.18653/v1/2022.acl-long.5",
+    pages = "57--69"
+}
+
+</pre>
+            </div>
+            </div>
+        </section>
+
+        <footer class="footer" style="padding-top: 50px;">
+            <div class="container">
+                <hr>
+                <p style="font-style: italic; text-align: center">
+                    Copyright &copy; 2018-2021 NExT++ /
+                    <a class="black" href="http://www.nextcenter.org/privacy-policy" target="_blank" >Privacy Policy</a> /
+                    <a class="black" href="http://www.nextcenter.org/terms-conditions" target="_blank" >Terms &amp; Conditions</a>
+                </p>
+            </div>
+        </footer>
+
+        <script type="text/javascript" src="scripts/jquery-3.2.1.min.js"></script>
+        <script type="text/javascript" src="scripts/bootstrap.min.js"></script>
+        <script type="text/javascript" src="scripts/jquery.easing.min.js"></script>
+        <script type="text/javascript" src="scripts/scrolling-nav.js"></script>
+    </body>
+</html>
