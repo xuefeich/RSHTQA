@@ -631,7 +631,7 @@ class TagopModel(nn.Module):
                     number_indexes_batch[num_numbers,0] = bsz
                     number_indexes_batch[num_numbers,1] = selected_index_mean
                     for roud in range(self.num_ops):
-                        operand_prediction[num_numbers,roud] = self.operand_predictor(torch.cat((torch.mean(sequence_output[bsz , selected_index],dim = 0).squeeze(0), opt_output[bsz,roud]),dim = -1))
+                        operand_prediction[num_numbers,roud] = self.operand_predictor(torch.cat((torch.mean(concatenated_qtp_if[bsz , selected_index],dim = 0).squeeze(0), opt_output[bsz,roud]),dim = -1))
                         cur_score = operand_prediction[num_numbers,roud,1]
                         if cur_score > top_scores[bsz,roud]:
                             top_scores[bsz,roud] = cur_score
@@ -659,7 +659,7 @@ class TagopModel(nn.Module):
                         first_numbers[bsz,roud] = selected_numbers[selected_indexes.index(first_index)]
                         sec_index = max(top_2_indexes[bsz,roud])
                         sec_numbers[bsz,roud] = selected_numbers[selected_indexes.index(sec_index)]
-                        pred_order[bsz,roud] = torch.argmax(self.order_predictor(torch.cat((sequence_output[bsz , int(first_index)], opt_output[bsz,roud] , sequence_output[bsz , int(sec_index)]),dim=-1)),dim = -1)
+                        pred_order[bsz,roud] = torch.argmax(self.order_predictor(torch.cat((concatenated_qtp_if[bsz , int(first_index)], opt_output[bsz,roud] , concatenated_qtp_if[bsz , int(sec_index)]),dim=-1)),dim = -1)
 
         if num_numbers > 0:
             number_indexes_batch = number_indexes_batch[:num_numbers]
