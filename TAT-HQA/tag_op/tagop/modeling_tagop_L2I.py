@@ -113,6 +113,7 @@ class TagopModel(nn.Module):
                  operator_classes: int,
                  if_operator_classes:int,
                  scale_classes: int, # 5
+                 ari_classes:int,
                  num_head: int,
                  cross_attn_layer: int,
                  ca_with_self: int,
@@ -145,7 +146,11 @@ class TagopModel(nn.Module):
         # if tag predictor
         self.if_tag_predictor = FFNLayer(hidden_size, hidden_size, 2, dropout_prob)
         # order predictor
-        self.order_predictor = FFNLayer(hidden_size, hidden_size, 2, dropout_prob)
+        
+        self.order_predictor = FFNLayer(3*hidden_size, hidden_size, 2, dropout_prob)
+        self.opt_predictor = FFNLayer(2*hidden_size, hidden_size, 3, dropout_prob)
+        self.operand_predictor = FFNLayer(2*hidden_size, hidden_size, 2, dropout_prob)
+        self.ari_predictor = FFNLayer(hidden_size, hidden_size, ari_classes, dropout_prob)
         
         self.share_param = share_param
         self.cross_attn_layer = cross_attn_layer
@@ -167,6 +172,11 @@ class TagopModel(nn.Module):
         self.scale_criterion = nn.CrossEntropyLoss(reduction='none')
         # NLLLoss for tag_prediction
         self.NLLLoss = nn.NLLLoss(reduction='none')
+
+        self.ari_criterion = nn.CrossEntropyLoss(reduction='sum')
+        self.operand_criterion = nn.CrossEntropyLoss(reduction='sum')
+        self.opt_criterion = nn.CrossEntropyLoss(reduction='sum')
+        
 
         self.config = config
         self.arithmetic_op_index = arithmetic_op_index
