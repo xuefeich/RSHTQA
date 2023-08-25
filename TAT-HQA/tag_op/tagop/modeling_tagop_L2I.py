@@ -176,6 +176,7 @@ class TagopModel(nn.Module):
         self.ari_criterion = nn.CrossEntropyLoss(reduction='sum')
         self.operand_criterion = nn.CrossEntropyLoss(reduction='sum')
         self.opt_criterion = nn.CrossEntropyLoss(reduction='sum')
+        self.order_criterion = nn.CrossEntropyLoss(reduction='sum')
         
 
         self.config = config
@@ -282,8 +283,8 @@ class TagopModel(nn.Module):
         table_sequence_output = util.replace_masked_values(outputs[0], table_mask.unsqueeze(-1), 0)
         paragraph_reduce_mean = torch.mean(paragraph_sequence_output, dim=1)
         table_reduce_mean = torch.mean(table_sequence_output, dim=1)
-        cls_output = torch.cat((cls_output, table_reduce_mean, paragraph_reduce_mean), dim=-1)
-        scale_prediction = self.scale_predictor(cls_output)
+        scale_output = torch.cat((cls_output, table_reduce_mean, paragraph_reduce_mean), dim=-1)
+        scale_prediction = self.scale_predictor(scale_output)
         
         if self.share_param:
             for _ in range(self.cross_attn_layer):
@@ -299,12 +300,6 @@ class TagopModel(nn.Module):
 
         concatenated_qtp_if = sequence_output + if_sequence_output
 
-        opt_output = torch.zeros([batch_size,self.num_ops,self.hidden_size],device = device)
-        for bsz in range(batch_size):
-            opt_output[bsz] = concatenated_qtp_if[bsz,opt_mask[bsz]:opt_mask[bsz]+self.num_ops,:]
-            for roud in range(self.num_ops):
-               if ari_ops[bsz,roud] != -100:
-                  output_dict["loss"] = output_dict["loss"] + self.ari_criterion(self.ari_predictor(opt_output[bsz,roud]).unsqueeze(0) , ari_ops[bsz,roud].unsqueeze(0))
         
                     
         total_if_tag_prediction = self.if_tag_predictor(concatenated_qtp_if)
@@ -316,20 +311,7 @@ class TagopModel(nn.Module):
         total_tag_prediction = util.replace_masked_values(total_tag_prediction, qtp_attention_mask.unsqueeze(-1), 0)
         total_tag_prediction = util.masked_log_softmax(total_tag_prediction, mask = None)
         total_tag_prediction = util.replace_masked_values(total_tag_prediction, qtp_attention_mask.unsqueeze(-1), 0)
-        
-        paragraph_mask_only = paragraph_mask - question_if_part_attention_mask # q & p, for predicting the original operands.
-        for bsz in range(len(paragraph_mask_only)):
-            assert (paragraph_mask_only[bsz] == -1).any() == False
-        
-        table_reduce_mask = reduce_mean_index(table_mask, table_cell_index)
-        paragraph_reduce_mask = reduce_mean_index(paragraph_mask_only, paragraph_index)
-        
-        table_tag_prediction = util.replace_masked_values(total_tag_prediction, table_mask.unsqueeze(-1), 0)
-        paragraph_tag_prediction = util.replace_masked_values(total_tag_prediction, paragraph_mask.unsqueeze(-1), 0)
-   
-        
-     
-        
+
 
         output_dict = {}
 
@@ -340,8 +322,6 @@ class TagopModel(nn.Module):
         scale_prediction_loss = self.scale_criterion(scale_prediction, scale_labels).mean()
         tag_prediction_loss = self.NLLLoss(total_tag_prediction.transpose(1,2), tag_labels.long()).sum(-1).mean()
         
-    
-
         # for counter arithmetic problems only, use counter_arithmetic_mask
         if_operator_prediction_loss = self.if_operator_criterion(if_operator_prediction, if_operator_labels)
         if_operator_prediction_loss = util.replace_masked_values(if_operator_prediction_loss, counter_arithmetic_mask, 0)
@@ -350,9 +330,60 @@ class TagopModel(nn.Module):
         if_losses = if_operator_prediction_loss + if_tag_prediction_loss
         if_losses = util.replace_masked_values(if_losses, counter_arithmetic_mask, 0).mean()
 
-        output_dict["top2o_loss"] = top_2_order_prediction_loss.item()
-        output_dict["loss"] =  if_losses + tag_prediction_loss + top_2_order_prediction_loss + \
-                               scale_prediction_loss + operator_prediction_loss
+        output_dict["loss"] =  if_losses + tag_prediction_loss  + scale_prediction_loss + operator_prediction_loss
+
+        opt_output = torch.zeros([batch_size,self.num_ops,self.hidden_size],device = device)
+        for bsz in range(batch_size):
+            opt_output[bsz] = concatenated_qtp_if[bsz,opt_mask[bsz]:opt_mask[bsz]+self.num_ops,:]
+            for roud in range(self.num_ops):
+               if ari_ops[bsz,roud] != -100:
+                  output_dict["loss"] = output_dict["loss"] + self.ari_criterion(self.ari_predictor(opt_output[bsz,roud]).unsqueeze(0) , ari_ops[bsz,roud].unsqueeze(0))
+
+        num_numbers_truth = ari_labels.shape[0]
+        selected_numbers_output = torch.zeros([num_numbers_truth,self.num_ops,2*self.hidden_size],device = device)
+        num_numbers = 0
+        order_numbers = []
+        if num_numbers_truth >0:
+            for bsz in range(batch_size):
+               order_numbers.append([])
+               for selected_index in selected_indexes:
+                   if selected_index[0] == bsz:
+                       k = np.where(selected_index[1:] == 0)[0] # [bsz,subtok_index , ....,0]
+                       if len(k) == 0:
+                           number_index = selected_index[1:]
+                       else:
+                           number_index = selected_index[1:k[0]+1]
+                       for roud in range(self.num_ops):
+                           order_numbers[bsz].append([])
+                           selected_numbers_output[num_numbers,roud] = torch.cat((torch.mean(concatenated_qtp_if[bsz , number_index],dim = 0), opt_output[bsz,roud]),dim = -1)
+                           if ari_labels[num_numbers,roud] == 1:
+                               order_numbers[bsz][roud].append(number_index)
+                       num_numbers += 1
+
+            operand_prediction = self.operand_predictor(selected_numbers_output)
+            operand_loss = self.operand_criterion(operand_prediction.transpose(1,2),ari_labels)
+            output_dict["loss"] = output_dict["loss"] + operand_loss
+
+        if len(torch.nonzero(order_labels == -100)) < batch_size * self.num_ops:
+            order_output = torch.zeros([batch_size,self.num_ops,3*self.hidden_size],device = device)
+            for bsz in range(batch_size):
+               for roud in range(self.num_ops):
+                  if order_labels[bsz,roud] != -100:
+                     opd1_output = torch.mean(concatenated_qtp_if[bsz , order_numbers[bsz][roud][0]],dim = 0)
+                     opd2_output = torch.mean(concatenated_qtp_if[bsz , order_numbers[bsz][roud][1]],dim = 0)
+                     order_output[bsz,roud] = torch.cat((opd1_output, opt_output[bsz,roud] , opd2_output),dim = -1)
+
+            order_prediction = self.order_predictor(order_output)
+            order_loss = self.order_criterion(order_prediction.transpose(1,2),order_labels)
+            output_dict["loss"] = output_dict["loss"] + order_loss
+
+        for i in range(1, self.num_ops):
+            for j in range(i):
+                if len(torch.nonzero(opt_labels[:,j,i-1] == -100)) < opt_labels.shape[0]:
+                    output_dict["loss"] = output_dict["loss"] + self.opt_criterion(
+                            self.opt_predictor(torch.cat((opt_output[:, j, :], opt_output[:, i, :]), dim=-1)),opt_labels[:, j, i - 1])
+     
+        output_dict["top2o_loss"] = order_loss.item()
         return output_dict
 
 
