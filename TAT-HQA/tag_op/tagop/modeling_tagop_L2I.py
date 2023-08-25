@@ -235,6 +235,12 @@ class TagopModel(nn.Module):
                 
                 counter_arithmetic_mask: torch.LongTensor, # the input tensor is not used here, re-calculated later
                 original_mask: torch.LongTensor, # the input is tensor not used here, re-calculated later
+
+                opt_mask : torch.LongTensor,
+                opt_labels : torch.LongTensor,
+                ari_ops:torch.LongTensor,
+                ari_labels : torch.LongTensor,
+                selected_indexes : np.array,
                 
                 gold_answers: List,
                 paragraph_tokens: List[List[str]],
@@ -292,6 +298,15 @@ class TagopModel(nn.Module):
         table_sequence_output = util.replace_masked_values(sequence_output, table_mask.unsqueeze(-1), 0)
 
         concatenated_qtp_if = sequence_output + if_sequence_output
+
+        opt_output = torch.zeros([batch_size,self.num_ops,self.hidden_size],device = device)
+        for bsz in range(batch_size):
+            opt_output[bsz] = concatenated_qtp_if[bsz,opt_mask[bsz]:opt_mask[bsz]+self.num_ops,:]
+            for roud in range(self.num_ops):
+               if ari_ops[bsz,roud] != -100:
+                  output_dict["loss"] = output_dict["loss"] + self.ari_criterion(self.ari_predictor(opt_output[bsz,roud]).unsqueeze(0) , ari_ops[bsz,roud].unsqueeze(0))
+        
+                    
         total_if_tag_prediction = self.if_tag_predictor(concatenated_qtp_if)
         total_if_tag_prediction = util.replace_masked_values(total_if_tag_prediction, total_attention_mask.unsqueeze(-1), 0)
         total_if_tag_prediction = util.masked_log_softmax(total_if_tag_prediction, mask = None)
@@ -312,63 +327,9 @@ class TagopModel(nn.Module):
         table_tag_prediction = util.replace_masked_values(total_tag_prediction, table_mask.unsqueeze(-1), 0)
         paragraph_tag_prediction = util.replace_masked_values(total_tag_prediction, paragraph_mask.unsqueeze(-1), 0)
    
-        table_tag_reduce_max_prediction, _ = \
-            reduce_max_index_get_vector(table_tag_prediction[:, :, 1], table_sequence_output, table_cell_index) # bsize 512
-        table_sequence_reduce_mean_output = reduce_mean_index_vector(table_sequence_output, table_cell_index) # bsize 512 784
-        paragraph_tag_reduce_max_prediction, _ = \
-            reduce_max_index_get_vector(paragraph_tag_prediction[:, :, 1], paragraph_sequence_output, paragraph_index)
-        paragraph_sequence_reduce_mean_output = reduce_mean_index_vector(paragraph_sequence_output, paragraph_index)
-
-        masked_table_tag_reduce_max_prediction = util.replace_masked_values(table_tag_reduce_max_prediction,
-                                                                            table_reduce_mask,
-                                                                            -1e+5)
-        masked_paragraph_tag_reduce_max_prediction = util.replace_masked_values(paragraph_tag_reduce_max_prediction,
-                                                                                paragraph_reduce_mask,
-                                                                                -1e+5)
-        sorted_table_tag_prediction, sorted_cell_index = torch.sort(masked_table_tag_reduce_max_prediction,
-                                                                    dim=-1, descending=True)
-        sorted_paragraph_tag_prediction, sorted_paragraph_index = torch.sort(masked_paragraph_tag_reduce_max_prediction,
-                                                                             dim=-1, descending=True)
-        sorted_table_tag_prediction = sorted_table_tag_prediction[:, :2]
-        sorted_cell_index = sorted_cell_index[:, :2]
-        sorted_paragraph_tag_prediction = sorted_paragraph_tag_prediction[:, :2]
-        sorted_paragraph_index = sorted_paragraph_index[:, :2]
-        concat_tag_prediction = torch.cat((sorted_paragraph_tag_prediction, sorted_table_tag_prediction),
-                                          dim=1)
-        _, sorted_concat_tag_index = torch.sort(concat_tag_prediction, dim=-1, descending=True)
+        
      
-        top_2_order_ground_truth = torch.zeros(batch_size).to(device)
-        top_2_sequence_output_bw = torch.zeros(batch_size, 2, sequence_output.shape[2]).to(device)
-        ground_truth_index = 0
-        for bsz in range(batch_size):
-            if ("DIVIDE" in self.OPERATOR_CLASSES and predicted_operator_class[bsz] == self.OPERATOR_CLASSES["DIVIDE"]) or \
-                    ("DIFF" in self.OPERATOR_CLASSES and predicted_operator_class[bsz] == self.OPERATOR_CLASSES["DIFF"]) or \
-                    ("CHANGE_RATIO" in self.OPERATOR_CLASSES and predicted_operator_class[bsz] == self.OPERATOR_CLASSES["CHANGE_RATIO"]):
-                _index = sorted_concat_tag_index[bsz]
-
-                if ("DIVIDE" not in self.OPERATOR_CLASSES or operator_labels[bsz] != self.OPERATOR_CLASSES["DIVIDE"]) and \
-                        ("DIFF" not in self.OPERATOR_CLASSES or operator_labels[bsz] != self.OPERATOR_CLASSES["DIFF"]) and \
-                        ("CHANGE_RATIO" not in self.OPERATOR_CLASSES or operator_labels[bsz] != self.OPERATOR_CLASSES["CHANGE_RATIO"]):
-                    continue
-                top_2_order_ground_truth[ground_truth_index] = number_order_labels[bsz]
-                
-                if _index[0] > 1:
-                    top_2_sequence_output_bw[ground_truth_index, 0, :] = table_sequence_reduce_mean_output[bsz,
-                                                                         sorted_cell_index[bsz, _index[0] - 2], :]
-                else:
-                    top_2_sequence_output_bw[ground_truth_index, 0, :] = paragraph_sequence_reduce_mean_output[bsz,
-                                                                         sorted_paragraph_index[bsz, _index[0]], :]
-                if _index[1] > 1:
-                    top_2_sequence_output_bw[ground_truth_index, 1, :] = table_sequence_reduce_mean_output[bsz,
-                                                                         sorted_cell_index[bsz, _index[1] - 2], :]
-                else:
-                    top_2_sequence_output_bw[ground_truth_index, 1, :] = paragraph_sequence_reduce_mean_output[bsz,
-                                                                         sorted_paragraph_index[bsz, _index[1]], :]
-                ground_truth_index += 1
-
-        top_2_order_prediction_bw = self.order_predictor(
-            torch.mean(top_2_sequence_output_bw[:ground_truth_index], dim=1))
-        top_2_order_ground_truth = top_2_order_ground_truth[:ground_truth_index]
+        
 
         output_dict = {}
 
@@ -379,11 +340,7 @@ class TagopModel(nn.Module):
         scale_prediction_loss = self.scale_criterion(scale_prediction, scale_labels).mean()
         tag_prediction_loss = self.NLLLoss(total_tag_prediction.transpose(1,2), tag_labels.long()).sum(-1).mean()
         
-        if ground_truth_index != 0:
-            top_2_order_prediction_bw = util.masked_log_softmax(top_2_order_prediction_bw, mask=None)
-            top_2_order_prediction_loss = self.NLLLoss(top_2_order_prediction_bw, top_2_order_ground_truth.long()).mean()
-        else:
-            top_2_order_prediction_loss = torch.tensor(0, dtype=torch.float).to(device)
+    
 
         # for counter arithmetic problems only, use counter_arithmetic_mask
         if_operator_prediction_loss = self.if_operator_criterion(if_operator_prediction, if_operator_labels)
