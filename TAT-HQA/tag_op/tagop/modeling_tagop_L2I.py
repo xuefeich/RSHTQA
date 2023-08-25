@@ -7,7 +7,7 @@ from .tools import allennlp as util
 from typing import Dict, List, Tuple
 from .file_utils import is_scatter_available
 import numpy as np
-from data.data_util import get_op_1, get_op_2, get_op_3, SCALE, OPERATOR_CLASSES_, IF_OPERATOR_CLASSES_
+from data.data_util import SCALE, OPERATOR_CLASSES_, IF_OPERATOR_CLASSES_,ARI_CLASSES_
 from tatqa_utils import to_number
 
 np.set_printoptions(threshold=np.inf)
@@ -120,7 +120,6 @@ class TagopModel(nn.Module):
                  share_param: int,
                  hidden_size: int = None,
                  dropout_prob: float = None,
-                 arithmetic_op_index: List = None,
                  op_mode: int = None,
                  ablation_mode: int = None,
                  ):
@@ -180,16 +179,9 @@ class TagopModel(nn.Module):
         
 
         self.config = config
-        self.arithmetic_op_index = arithmetic_op_index
-        if ablation_mode == 0:
-            self.OPERATOR_CLASSES = OPERATOR_CLASSES_
-        elif ablation_mode == 1:
-            self.OPERATOR_CLASSES = get_op_1(op_mode)
-        elif ablation_mode == 2:
-            self.OPERATOR_CLASSES = get_op_2(op_mode)
-        else:
-            self.OPERATOR_CLASSES = get_op_3(op_mode)
+        self.OPERATOR_CLASSES = OPERATOR_CLASSES_
         self.IF_OPERATOR_CLASSES = IF_OPERATOR_CLASSES_
+        self.ARI_CLASSES = ARI_CLASSES_
         self._metrics = TaTQAEmAndF1()
 
     """
@@ -849,7 +841,7 @@ class TagopModel(nn.Module):
 
             output_dict[question_ids[bsz]] = {"answer": answer, "scale": SCALE[int(predicted_scale_class[bsz])]}
             
-            if predicted_operator_class[bsz] in self.arithmetic_op_index:
+            if int(predicted_operator_class[bsz]) == self.OPERATOR_CLASSES["Arithmetic"]:
                 predict_type = "arithmetic"
             else:
                 predict_type = ""
