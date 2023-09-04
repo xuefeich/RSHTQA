@@ -827,15 +827,18 @@ answer: str. The answer used to calculate metrics.
 class TagTaTQAReader(object):
     def __init__(self, tokenizer,
                  passage_length_limit: int = None, question_length_limit: int = None, sep="<s>", op_mode:int=8,
-                 ablation_mode:int=0):
+                 ablation_mode:int=0,num_ops ：6):
         self.max_pieces = 512
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
         self.question_length_limit = question_length_limit
-        self.sep_start = self.tokenizer._convert_token_to_id(sep)
-        self.sep_end = self.tokenizer._convert_token_to_id(sep)
+        self.sep = self.tokenizer._convert_token_to_id(sep)
+        self.opt = self.tokenizer.encode("<OPT>")[1]
         self.skip_count = 0
         self.op_mode=op_mode
+
+        self.num_ops = num_ops
+                     
         if ablation_mode == 0:
             self.OPERATOR_CLASSES=OPERATOR_CLASSES_
         elif ablation_mode == 1:
@@ -881,36 +884,26 @@ class TagTaTQAReader(object):
     def _to_instance(self, question_text: str, question_if_text: str, table: List[List[str]], paragraphs: List[Dict], answer_from: str,
                      answer_type: str, answer:str, counter_derivation: str, original_derivation: str, counter_facts:list,  original_answer_mapping: Dict,
                      if_mapping: Dict, if_operator:str, counter_answer_mapping:Dict, counter_scale: str, question_id: str, is_counter: int):
-
-        #print(question_text)
-        #print(question_if_text)
-        #assert question_if_text in question_text
         
+
+        order_labels = np.zeros(self.num_ops)
+
+        if answer_type == "arithmetic":
+            operator_class = self.OPERATOR_CLASSES["ARITHMETIC"]
+            num_facts = facts_to_nums(facts)
         
         counter_operator_class = get_operator_class(counter_derivation, answer_type, counter_facts, answer,
                                             counter_answer_mapping, counter_scale, self.OPERATOR_CLASSES)
         counter_scale_class = SCALE.index(counter_scale)
         if_operator_class = IF_OPERATOR_CLASSES_[if_operator]
-        #print('counter_operator_class', counter_operator_class)
-        #print('if_operator_class', if_operator)
-        #print('counter_scale', counter_scale)
-        #print('c o derivation', counter_derivation, original_derivation)
         
         if counter_operator_class is None:
             self.skip_count += 1
-            # print("skipping no op", counter_derivation, counter_facts, original_derivation, answer)
             return None
 
         table_cell_tokens, table_ids, table_tags, table_if_tags, table_cell_number_value, table_cell_index, _ = \
                             table_tokenize(table, self.tokenizer, original_answer_mapping, if_mapping)
-        #print('answer', answer)
-        #print('table_cell_tokens', table_cell_tokens)
-        #print('original_mapping', original_answer_mapping)
-        #print('table_tags', table_tags)
-        #print('if_mapping', if_mapping)
-        #print('table_if_tags', table_if_tags)
-        #print('table_cell_number_value', table_cell_number_value)
-        #print('table_cell_index', table_cell_index)
+
         
         for i in range(len(table)):
             for j in range(len(table[i])):
@@ -926,27 +919,15 @@ class TagTaTQAReader(object):
                 paragraph_number_value, paragraph_index, _= \
             paragraph_tokenize(question_text, paragraphs, self.tokenizer, original_answer_mapping, if_mapping)
         
-        #print('paragraph_tokens', paragraph_tokens)
-        #print('paragraph_tags',paragraph_tags)
-        #print('paragraph_if_tags', paragraph_if_tags)
-        #print('paragraph_number_value', paragraph_number_value)
-        #print('paragraph_index', paragraph_index)
         
         
         question_and_if_tokens, question_and_if_ids, question_and_if_tags, question_and_if_if_tags, _,_, \
                 question_and_if_number_value, question_and_if_index, question_if_part_indicator, _= \
             question_if_part_tokenize(question_text, question_if_text, self.tokenizer, original_answer_mapping, if_mapping)
-           
-        #print('question and if tokens', question_and_if_tokens)
-        #print('question and if tags', question_and_if_tags)
-        #print('question and if if tags', question_and_if_if_tags)
-        #print('question and if number value', question_and_if_number_value)
-        #print('question and if index', question_and_if_index)
-        #print('question if part indicator', question_if_part_indicator)
+
             
         number_order_label = get_number_order_labels(paragraphs, table, question_text, counter_derivation, counter_operator_class,
                                                      if_mapping, original_answer_mapping, question_id, self.OPERATOR_CLASSES)
-        #print('number_order_label', number_order_label)
         
         concat_params = {"question_and_if_ids": question_and_if_ids, "question_and_if_tags": question_and_if_tags, "question_and_if_if_tags": question_and_if_if_tags,
                          "question_and_if_index": question_and_if_index, "question_if_part_indicator": question_if_part_indicator, "question_and_if_number_value": question_and_if_number_value, "question_and_if_tokens": question_and_if_tokens,
@@ -956,20 +937,7 @@ class TagTaTQAReader(object):
         
         input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
         table_mask, table_cell_number_value, table_cell_index, tags, if_tags, input_segments = _concat(**concat_params)
-        
-        #print("checking concat")
-        #print(input_ids != 0)
-        #print(qtp_attention_mask)
-        #print(qtp_attention_mask + question_if_part_attention_mask)
-        #print(question_if_part_attention_mask)
-        #print(paragraph_mask)
-        #print(table_mask)
-        #print(tags)
-        #print(if_tags)
-        #print('')
-        
-        #if question_if_part_attention_mask.int().sum() == 0:
-        #    raise RuntimeError("empty question if part", question_if_text, question_if_part_indicator)
+
         
         answer_dict = {"answer_type": answer_type, "answer": answer, "scale": counter_scale, "answer_from": answer_from, "gold_if_op": if_operator}
         
