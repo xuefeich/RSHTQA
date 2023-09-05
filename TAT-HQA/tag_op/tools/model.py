@@ -14,7 +14,7 @@ class TagopPredictModel():
         self.updates = 0
         self.network = network
 
-        self.mnetwork = nn.DataParallel(self.network) if args.gpu_num > 1 else self.network
+        self.mnetwork = nn.DataParallel(self.network).module if args.gpu_num > 1 else self.network
 
         if self.args.gpu_num > 0:
             self.network.cuda()
@@ -65,7 +65,7 @@ class TagopFineTuningModel():
         if state_dict is not None:
             print("Load Model!")
             self.network.load_state_dict(state_dict["state"])
-        self.mnetwork = nn.DataParallel(self.network) if args.gpu_num > 1 else self.network # parallel is currently not supported
+        self.mnetwork = nn.DataParallel(self.network).module if args.gpu_num > 1 else self.network # parallel is currently not supported
 
         self.total_param = sum([p.nelement() for p in self.network.parameters() if p.requires_grad])
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
