@@ -931,7 +931,7 @@ class TagTaTQAReader(object):
                except:
                    print("derivation split err")
                    counter_operator_class = None
-                if dvt_split_suc == 1:
+               if dvt_split_suc == 1:
                    ari_ops = [self.ari_ops[i[0]] for i in ari_operations]
                    operands = [i[1:] for i in ari_operations]
                    ari_tags = {'table':[],'para':[],'operation':[]}
