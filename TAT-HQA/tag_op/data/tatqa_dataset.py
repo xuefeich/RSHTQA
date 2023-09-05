@@ -847,7 +847,7 @@ class TagTaTQAReader(object):
         self.op_mode=op_mode
 
         self.num_ops = num_ops
-        self.ari_ops = ARITHMETIC_CLASSES_
+        self.ari_ops = ARI_CLASSES_
                      
         if ablation_mode == 0:
             self.OPERATOR_CLASSES=OPERATOR_CLASSES_
