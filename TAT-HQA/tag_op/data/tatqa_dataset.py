@@ -839,7 +839,7 @@ answer: str. The answer used to calculate metrics.
 class TagTaTQAReader(object):
     def __init__(self, tokenizer,
                  passage_length_limit: int = None, question_length_limit: int = None, sep="<s>", op_mode:int=8,
-                 ablation_mode:int=0,num_ops ：int = 6):
+                 ablation_mode:int=0,num_ops :int = 6):
         self.max_pieces = 512
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
