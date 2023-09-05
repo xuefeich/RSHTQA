@@ -10,7 +10,7 @@ import torch.nn as nn
 from pprint import pprint
 from data.data_util import get_op_1, get_arithmetic_op_index_1, get_op_2, get_arithmetic_op_index_2
 from data.data_util import get_op_3, get_arithmetic_op_index_3
-from data.data_util import OPERATOR_CLASSES_, IF_OPERATOR_CLASSES_
+from data.data_util import OPERATOR_CLASSES_, IF_OPERATOR_CLASSES_, ARI_CLASSES_
 from tools.utils import create_logger, set_environment
 from data.tatqa_batch_gen import TaTQABatchGen, TaTQATestBatchGen
 from transformers import RobertaModel, BertModel
@@ -31,6 +31,7 @@ parser.add_argument("--ca_with_self", type=int, default=1) # use self MHA in mat
 parser.add_argument("--share_param", type=int, default=1) # enable parameter sharing in matching block? 1 true 0 false
 parser.add_argument("--do_finetune", type=int, default=0) # fine tuning from --model_finetune_from? 1 true 0 false.
 parser.add_argument("--model_finetune_from", type=str, default='') # if do_finetune, input the path to checkpoint
+parser.add_argument("--num_ops", type=int, default=6)
 
 args = parser.parse_args()
 if args.ablation_mode != 0:
@@ -56,11 +57,11 @@ def main():
     best_result = float("-inf")
     logger.info("Loading data...")
 
-    train_itr = TaTQABatchGen(args, data_mode = "train", encoder=args.encoder)
+    train_itr = TaTQABatchGen(args, data_mode = "train", num_ops = args.num_ops,encoder=args.encoder)
     if args.ablation_mode != 3:
-        dev_itr = TaTQATestBatchGen(args, data_mode="dev", encoder=args.encoder)
+        dev_itr = TaTQATestBatchGen(args, data_mode="dev",num_ops = args.num_ops, encoder=args.encoder)
     else:
-        dev_itr = TaTQABatchGen(args, data_mode="dev", encoder=args.encoder)
+        dev_itr = TaTQABatchGen(args, data_mode="dev",num_ops = args.num_ops, encoder=args.encoder)
 
     num_train_steps = int(args.max_epoch * len(train_itr) / args.gradient_accumulation_steps)
 
@@ -101,6 +102,8 @@ def main():
         bsz = args.batch_size,
         operator_classes = len(operators),
         if_operator_classes = len(if_operators),
+        ari_classes = len(ARI_CLASSES_),
+        num_ops = args.num_ops,
         scale_classes = 5,
         num_head = 8, # MHA head number
         cross_attn_layer = args.cross_attn_layer,
