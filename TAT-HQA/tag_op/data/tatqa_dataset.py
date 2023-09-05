@@ -1085,7 +1085,7 @@ class TagTaTQAReader(object):
             number_indexes = []
             cur_indexes = []
             cur = 0
-            selected_indexes = torch.nonzero(tags_ground_truth[0]).squeeze(-1)
+            selected_indexes = torch.nonzero(tags[0]).squeeze(-1)
             
             if len(selected_indexes) == 0:
                 print("no number")
