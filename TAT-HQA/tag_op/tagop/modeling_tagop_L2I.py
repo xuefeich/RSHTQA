@@ -134,6 +134,7 @@ class TagopModel(nn.Module):
         self._metrics = TaTQAEmAndF1(mode=2)
         if hidden_size is None:
             hidden_size = self.config.hidden_size
+        self.hidden_size = hidden_size
         if dropout_prob is None:
             dropout_prob = self.config.hidden_dropout_prob
         # if operator predictor
