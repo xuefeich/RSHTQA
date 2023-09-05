@@ -368,14 +368,15 @@ class TagopModel(nn.Module):
             order_prediction = self.order_predictor(order_output)
             order_loss = self.order_criterion(order_prediction.transpose(1,2),order_labels)
             output_dict["loss"] = output_dict["loss"] + order_loss
+            output_dict["top2o_loss"] = order_loss.item()
+        else:
+            output_dict["top2o_loss"] = torch.tensor(0.0,device=device,requires_grad=True)
 
         for i in range(1, self.num_ops):
             for j in range(i):
                 if len(torch.nonzero(opt_labels[:,j,i-1] == -100)) < opt_labels.shape[0]:
                     output_dict["loss"] = output_dict["loss"] + self.opt_criterion(
                             self.opt_predictor(torch.cat((opt_output[:, j, :], opt_output[:, i, :]), dim=-1)),opt_labels[:, j, i - 1])
-     
-        output_dict["top2o_loss"] = order_loss.item()
         return output_dict
 
 
