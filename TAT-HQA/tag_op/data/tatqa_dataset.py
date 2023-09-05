@@ -1250,7 +1250,7 @@ class TagTaTQAReader(object):
 class TagTaTQATestReader(object):
     def __init__(self, tokenizer,
                  passage_length_limit: int = None, question_length_limit: int = None, sep="<s>",
-                 ablation_mode=0, op_mode=0):
+                 ablation_mode=0, op_mode=0, num_ops = 6 , mode ="dev"):
         self.max_pieces = 512
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
@@ -1259,13 +1259,14 @@ class TagTaTQATestReader(object):
         self.opt = self.tokenizer.encode("<OPT>")[1]
         tokens = self.tokenizer._tokenize("Feb 2 Nov")
         self.skip_count = 0
+        self.mode = mode
+        self.num_ops = num_ops
         self.ablation_mode = ablation_mode
         if self.ablation_mode == 3:
             self.OPERATOR_CLASSES=get_op_3(op_mode)
         if ablation_mode == 0:
             self.OPERATOR_CLASSES=OPERATOR_CLASSES_
-        self.op_count = {"Span-in-text":0, "Cell-in-table":0, "Spans":0, "Sum":0, "Count":0, "Average":0,
-                         "Multiplication":0, "Division":0, "Difference":0, "Change ratio":0}
+        self.op_count = {"Span-in-text":0, "Cell-in-table":0, "Spans":0, "Sum":0, "Count":0, "Arithmetic":0}
         self.scale_count = {"":0, "thousand":0, "million":0, "billion":0, "percent":0}
         
 
@@ -1543,8 +1544,7 @@ class TagTaTQATestReader(object):
                 except RuntimeError:
                     print(question_answer["uid"])
         print(self.scale_count)
-        self.op_count = {"Span-in-text": 0, "Cell-in-table": 0, "Spans": 0, "Sum": 0, "Count": 0, "Average": 0,
-                         "Multiplication": 0, "Division": 0, "Difference": 0, "Change ratio": 0}
+        self.op_count = {"Span-in-text": 0, "Cell-in-table": 0, "Spans": 0, "Sum": 0, "Count": 0, "Arithmetic": 0}
         self.scale_count = {"": 0, "thousand": 0, "million": 0, "billion": 0, "percent": 0}
         print('total instances', len(instances))
         
