@@ -669,6 +669,7 @@ def _concat(question_and_if_ids,
 
     opt_mask[0,passage_length +1  : passage_length + num_ops + 1 ] = 1
     
+    
     max_question_index = question_and_if_index[:question_length - 2][-1]
     if truncated_question == False:
         assert max_question_index == question_and_if_index[-1]
@@ -689,9 +690,33 @@ def _concat(question_and_if_ids,
     # truncate these
     paragraph_number_value  = question_and_if_number_value[:max_question_index] + paragraph_number_value
     paragraph_tokens = question_and_if_tokens[:max_question_index] + paragraph_tokens
+
+    if ari_tags != None:
+      ari_table_tags = ari_tags["table"]
+      ari_para_tags = ari_tags["para"]
+      for i in range(num_ops):
+         r_num_ops = len(ari_table_tags)
+         if i >= r_num_ops:
+             break
+         if isinstance(ari_table_tags[i],dict):
+             opd1_tags = np.array(ari_table_tags[i]["operand1"][:table_length])
+             opd2_tags = np.array(ari_table_tags[i]["operand2"][:table_length])
+             for j in np.where(opd2_tags == 1):
+                 opd1_tags[j] = 1
+             ari_round_labels[0,i,question_length:question_length + table_length] = torch.from_numpy(opd1_tags)
+             if paragraph_length > 1:
+                p_opd1_tags = np.array(ari_para_tags[i]["operand1"][:paragraph_length])
+                p_opd2_tags = np.array(ari_para_tags[i]["operand2"][:paragraph_length])
+                for j in np.where(p_opd2_tags == 1):
+                    p_opd1_tags[j] = 1
+                ari_round_labels[0,i, question_length + table_length + 1:question_length + table_length + paragraph_length+1] = torch.from_numpy(p_opd1_tags)
+         else:
+             ari_round_labels[0,i, question_length:question_length + table_length] = torch.from_numpy(np.array(ari_table_tags[i][:table_length]))
+             if paragraph_length > 1:
+                ari_round_labels[0,i, question_length + table_length + 1:question_length + table_length + paragraph_length+1] = torch.from_numpy(np.array(ari_para_tags[i][:paragraph_length]))
     
     return input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-           table_mask, table_cell_number_value, table_index, tags, if_tags, input_segments
+           table_mask, table_cell_number_value, table_index, tags, if_tags, input_segments,opt_mask,ari_round_labels
 
 def _test_concat(question_and_if_ids,
             question_and_if_index,
@@ -1017,6 +1042,109 @@ class TagTaTQAReader(object):
         
         answer_dict = {"answer_type": answer_type, "answer": answer, "scale": counter_scale, "answer_from": answer_from, "gold_if_op": if_operator}
 
+
+
+        if ari_ops != None:
+            ari_ops_padding = self.num_ops - len(ari_ops)
+            if ari_ops_padding > 0:
+               ari_ops += [0]*ari_ops_padding
+            if ari_ops == [0] * self.num_ops:
+                print("no ari ops")
+                ari_ops = [-100] * self.num_ops
+            else:
+                get0 = False
+                for i in range(self.num_ops):
+                    if get0 == True:
+                        ari_ops[i] = -100
+                    if ari_ops[i] == 0:
+                        if get0 == False:
+                            get0 = True
+        else:
+            ari_ops = [-100] * self.num_ops
+
+        if ari_ops == [-100] * self.num_ops:
+            opt_labels[0,:,:] = -100
+            ari_labels[0,:,:] = -100
+            order_labels[:] = -100
+            number_indexes = []
+            ari_sel_labels = []
+            if ari_ops[1] == 0:
+                opt_labels[0,:,:] = -100
+        else:
+            for i in range(1,self.num_ops-1):
+                for j in range(i):
+                    opt_labels[0,i,j] = -100
+                if ari_ops[i] == 0:
+                    ari_labels[0,i:,:] = -100
+                    opt_labels[0,i-1:,:] = -100
+                    opt_labels[0,:,i-1:] = -100
+
+            number_indexes = []
+            cur_indexes = []
+            cur = 0
+            selected_indexes = torch.nonzero(tags_ground_truth[0]).squeeze(-1)
+            
+            if len(selected_indexes) == 0:
+                print("no number")
+                return None
+            for sel in selected_indexes:
+                sel = int(sel)
+                if int(table_cell_index[0,sel]) != 0:
+                    if int(table_cell_index[0,sel]) == cur or cur_indexes == []:
+                        if cur_indexes == []:
+                            cur = int(table_cell_index[0,sel])
+                        cur_indexes.append(sel)
+                    else:
+                        cur = int(table_cell_index[0,sel])
+                        number_indexes.append(cur_indexes)
+                        cur_indexes = [sel]
+                else:
+                    if int(paragraph_index[0,sel]) == cur or cur_indexes == []:
+                        if cur_indexes == []:
+                            cur = int(paragraph_index[0,sel])
+                        cur_indexes.append(sel)
+                    else:
+                        cur = int(paragraph_index[0,sel])
+                        number_indexes.append(cur_indexes)
+                        cur_indexes = [sel]
+            number_indexes.append(cur_indexes)
+            distinct_si = []
+            for  i , ni in enumerate(number_indexes):
+                distinct_si.append(ni[0])
+                p = 10 - len(ni)
+                if  p > 0:
+                    number_indexes[i] += [0] * p
+                else:
+                    number_indexes[i] = number_indexes[i][:10]
+                    print("long number")
+                    print(ni)
+                    print(table_cell_index[0,ni])
+                    print(paragraph_index[0,ni])
+                    if int(table_cell_index[0,ni[0]]) != 0 :
+                        print(table_cell_number_value[int(table_cell_index[0,ni[0]]) - 1])
+                    elif int(paragraph_index[0,ni[0]]) != 0:
+                        print(paragraph_number_value[int(paragraph_index[0,ni[0]]) - 1])
+                    else:
+                        print("extract err")#if question_answer["uid"] in ignore_ids:
+
+            ari_sel_labels = ari_labels[0,:,distinct_si].transpose(0,1)
+            if ari_sel_labels.shape[0] != len(number_indexes):
+                print(ari_sel_labels)
+                print(number_indexes)
+                exit(0)
+
+            for i in range(self.num_ops):
+                if ari_ops[i] in [2,4]:
+                    count = 0
+                    for sl in ari_sel_labels:
+                        if sl[i] == 1:
+                            count += 1
+                    if count != 2:
+                        order_labels[i] = -100
+                else:
+                    order_labels[i] = -100
+
+        opt_id = torch.nonzero(opt_mask == 1)[0,1]
         
         
         make_instance = {
@@ -1032,7 +1160,6 @@ class TagTaTQAReader(object):
         "table_cell_number_value": np.array(table_cell_number_value), 
         "table_cell_index": np.array(table_cell_index), 
         "table_cell_tokens": table_cell_tokens, 
-        "number_order_labels": int(number_order_label),
         "tag_labels": np.array(tags), 
         "if_tag_labels": np.array(if_tags), 
         "operator_labels": int(counter_operator_class), 
@@ -1041,7 +1168,13 @@ class TagTaTQAReader(object):
         "answer_dict": answer_dict, 
         "question_id": question_id, 
         "is_counter_arithmetic": int(is_counter == 1 and answer_type == 'arithmetic'), 
-        "is_original": 1 - is_counter
+        "is_original": 1 - is_counter,
+        "ari_ops" : torch.LongTensor(ari_ops),
+        "opt_mask" : opt_id,
+        "order_labels" : torch.LongTensor(order_labels),
+        "ari_labels" : torch.LongTensor(np.array(ari_sel_labels)),
+        "selected_indexes" : np.array(number_indexes),
+        "opt_labels": torch.LongTensor(np.array(opt_labels)),
         }
         
         return make_instance
