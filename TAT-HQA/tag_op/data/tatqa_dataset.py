@@ -1293,46 +1293,127 @@ class TagTaTQATestReader(object):
             "question_id": question_id,
         }
 
-    def summerize_op(self, derivation, answer_type, facts, answer, answer_mapping, scale):
+    def summerize_op(self, derivation, answer_type, facts, answer, answer_mapping, tv,pv):
+        truth_numbers = []
+        order_labels = [-100]*self.num_ops
         if answer_type == "span":
-            if "table" in answer_mapping.keys() and answer_mapping["table"]:
+            if "table" in answer_mapping.keys():
                 self.op_count["Cell-in-table"] += 1
-                return "Cell-in-table"
-            elif "paragraph" in answer_mapping.keys() and answer_mapping["paragraph"]:
+                return ["Cell-in-table"] +["ignore"]* (self.num_ops-1),truth_numbers,order_labels
+            elif "paragraph" in answer_mapping.keys():
                 self.op_count["Span-in-text"] += 1
-                return "Span-in-text"
+                return ["Span-in-text"] +["ignore"]* (self.num_ops-1) , truth_numbers,order_labels
         elif answer_type == "multi-span":
             self.op_count["Spans"] += 1
-            return "Spans"
+            return ["Spans"]  +["ignore"]* (self.num_ops-1),truth_numbers,order_labels
         elif answer_type == "count":
             self.op_count["Count"] += 1
-            return "Count"
+            return ["Count"] +["ignore"] * (self.num_ops-1),truth_numbers,order_labels
         elif answer_type == "arithmetic":
             num_facts = facts_to_nums(facts)
             if not is_number(str(answer)):
-                return ""
-            if _is_change_ratio(num_facts, answer):
-                self.op_count["Change ratio"] += 1
-                return "Change ratio"
-            elif _is_average(num_facts, answer):
-                self.op_count["Average"] += 1
-                return "Average"
-            elif _is_sum(num_facts, answer):
-                self.op_count["Sum"] += 1
-                return "Sum"
-            elif _is_times(num_facts, answer):
-                self.op_count["Multiplication"] += 1
-                return "Multiplication"
-            elif _is_diff(num_facts, answer):
-                self.op_count["Difference"] += 1
-                return "Difference"
-            elif _is_division(num_facts, answer):
-                self.op_count["Division"] += 1
-                return "Division"
+                return "",truth_numbers
+            else:
+                self.op_count["Arithmetic"] += 1
+                isavg = 0
+                try:
+                   if _is_average(num_facts,answer):
+                       operator_classes = ["Average"]+["Stop"] +["ignore"]* (self.num_ops-2)
+                       isavg = 1
+                except:
+                   isavg = 0
+                if isavg == 0:
+                    dvt_split_suc = 0
+                    try:
+                       ari_operations = infix_evaluator(derivation)
+                       #print(len(ari_operations))
+                       for ari in ari_operations:
+                           for num in ari[1:]:
+                               if not isinstance(num,str):
+                                   if num not in truth_numbers:
+                                       truth_numbers.append(num)
+                       dvt_split_suc = 1
+                       if len(ari_operations) > self.num_ops:
+                           operator_classes = None
+                           dvt_split_suc = 0
+                    except:
+                       print(derivation)
+                       operator_classes = None
+                    if dvt_split_suc == 1:
+                        operator_classes = ["ignore"]*self.num_ops
+                        for i,ari in enumerate(ari_operations):
+                            if ari[0] == "SUM":
+                                operator_classes[i] = "Sum"
+                            if ari[0] == "DIFF":
+                                operator_classes[i] = "Difference"
+                                opd1 = -100
+                                opd2 = -100
+                                tl = len(tv)
+                                pl = len(pv)
+                                for o in range(tl+pl):
+                                    if isinstance(ari[1],str) or isinstance(ari[2],str):
+                                        break
+                                    if o < tl:
+                                        if tv[o] == ari[1]:
+                                            opd1 = o
+                                        if tv[o] == ari[2]:
+                                            opd2 = o
+                                    else:
+                                        if pv[o-tl] == ari[1]:
+                                            opd1 = o
+                                        if pv[o-tl] == ari[2]:
+                                            opd2 = o
+                                if opd1 == -100 or opd2 == -100:
+                                    print("order fail")
+                                    order_labels[i] = -100
+                                else:
+                                    if opd1 <= opd2:
+                                        order_labels[i] = 0
+                                    else:
+                                        order_labels[i] = 1
+                            if ari[0] == "TIMES":
+                                operator_classes[i] = "Multiplication"
+                            if ari[0] == "DIVIDE":
+                                operator_classes[i] = "Division"
+                                opd1 = -100
+                                opd2 = -100
+                                tl = len(tv)
+                                pl = len(pv)
+                                for o in range(tl+pl):
+                                    if isinstance(ari[1],str) or isinstance(ari[2],str):
+                                        break
+                                    if o < tl:
+                                        if tv[o] == ari[1]:
+                                            opd1 = o
+                                        if tv[o] == ari[2]:
+                                            opd2 = o
+                                    else:
+                                        if pv[o-tl] == ari[1]:
+                                            opd1 = o
+                                        if pv[o-tl] == ari[2]:
+                                            opd2 = o
+                                if opd1 == -100 or opd2 == -100:
+                                    print("order fail")
+                                    order_labels[i] = -100
+                                else:
+                                    if opd1 <= opd2:
+                                        order_labels[i] = 0
+                                    else:
+                                        order_labels[i] = 1
+                            if ari[0] == "AVERAGE":
+                                operator_classes[i] = "Average"
+                            j = i
+                        #print(j)
+                        if j < self.num_ops - 1:
+                            operator_classes[j+1] = "Stop"
+                    else:
+                       operator_classes = None
+
+            return operator_classes,truth_numbers,order_labels
                 
 
     def _to_test_instance(self, question_text: str, question_if_text:str, table: List[List[str]], paragraphs: List[Dict], answer_from: str,
-                          answer_type: str, answer:str, question_id:str, scale: str):
+                          answer_type: str, answer:str, question_id:str, scale: str, original_answer_mapping,facts,original_derivation,counter_derivation):
         
         dummy_dict = {}
         
@@ -1370,8 +1451,17 @@ class TagTaTQATestReader(object):
         table_mask, table_cell_number_value, table_cell_index, input_segments,opt_mask = _test_concat(**concat_params)
 
         opt_id = torch.nonzero(opt_mask == 1)[0,1]
+
+        if self.mode == "dev" and original_derivation != None and facts != None and original_answer_mapping != None:
+            gold_ops,truth_numbers,order_labels = self.summerize_op(original_derivation, answer_type, facts, answer, original_answer_mapping, table_cell_number_value,paragraph_number_value)
+            if gold_ops is None:
+                gold_ops = ["ignore"] *self.num_ops
+        else:
+            gold_ops= None
+            order_labels = None
+            truth_numbers = None
             
-        answer_dict = {"answer_type": answer_type, "answer": answer, "answer_from": answer_from , "scale": scale}
+        answer_dict = {"answer_type": answer_type, "answer": answer, "answer_from": answer_from , "scale": scale,"gold_ops":gold_ops,"truth_numbers":truth_numbers,"order_labels":order_labels}
 
         self.scale_count[scale] += 1
 
@@ -1424,8 +1514,30 @@ class TagTaTQATestReader(object):
                     answer = question_answer["answer"] if "answer" in question_answer else ""
                     answer_from = question_answer["answer_from"] if "answer_from" in question_answer else ""
                     scale = question_answer["scale"] if "scale" in question_answer else ""
+
+                    if "original_answer_mapping" in question_answer:
+                        original_answer_mapping = question_answer["original_answer_mapping"]
+                    elif "mapping" in in question_answer:
+                        original_answer_mapping = question_answer["mapping"]
+                    else:
+                        original_answer_mapping = None
+                    if "counter_facts" in question_answer:
+                        facts = question_answer["counter_facts"]
+                    elif "facts" in question_answer:
+                        facts = question_answer["facts"]
+                    else:
+                        facts = None
+                    if "original_derivation" in question_answer:
+                        original_derivation = question_answer["original_derivation"]
+                    elif "derivation" in question_answer:
+                        original_derivation = question_answer["derivation"]
+                    else:
+                        original_derivation = None
+                    counter_derivation = question_answer["derivation"] if "derivation" in question_answer else None
+
+                    
                     instance = self._to_test_instance(question, question_if_part, table, paragraphs, answer_from,
-                                    answer_type, answer, question_answer["uid"], scale)
+                                    answer_type, answer, question_answer["uid"], scale,original_answer_mapping,facts,original_derivation,counter_derivation)
                     if instance is not None:
                         instances.append(instance)
                 except RuntimeError:
