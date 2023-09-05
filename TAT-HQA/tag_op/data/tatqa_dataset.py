@@ -595,7 +595,10 @@ def _concat(question_and_if_ids,
             sep,
             question_length_limitation,
             passage_length_limitation,
-            max_pieces):
+            max_pieces,
+            opt,
+            num_ops,
+            ari_tags):
     in_table_cell_index = table_cell_index.copy()
     in_paragraph_index = paragraph_index.copy()
     
@@ -609,6 +612,9 @@ def _concat(question_and_if_ids,
     if_tags = torch.zeros_like(input_ids)
     question_if_part_attention_mask = torch.zeros_like(input_ids)
 
+    opt_mask = torch.zeros_like(input_ids)
+    ari_round_labels = torch.zeros([1,num_ops,input_ids.shape[1]])
+
     truncated_question = False
     if question_length_limitation is not None:
         if len(question_and_if_ids) > question_length_limitation:
@@ -617,7 +623,7 @@ def _concat(question_and_if_ids,
             question_and_if_index = question_and_if_index[:question_length_limitation]
             truncated_question = True
     
-    question_ids = [sep_start] + question_and_if_ids + [sep_end]
+    question_ids = [sep] + question_and_if_ids + [sep]
     question_if_part_indicator = [0] + question_if_part_indicator
     question_if_part_attention_mask[0, :len(question_if_part_indicator)] = torch.from_numpy(np.array(question_if_part_indicator))
     
@@ -630,18 +636,20 @@ def _concat(question_and_if_ids,
             table_length = passage_length_limitation
             paragraph_length = 0
         elif len(table_ids) + len(paragraph_ids) + 1> passage_length_limitation:
-            passage_ids = table_ids + [sep_end] + paragraph_ids
+            passage_ids = table_ids + [sep] + paragraph_ids
             passage_ids = passage_ids[:passage_length_limitation]
             table_length = len(table_ids)
             paragraph_length = passage_length_limitation - table_length - 1
         else:
-            passage_ids = table_ids + [sep_end] + paragraph_ids
+            passage_ids = table_ids + [sep] + paragraph_ids
             table_length = len(table_ids)
             paragraph_length = len(paragraph_ids)
     else:
-        passage_ids = table_ids + [sep_end] + paragraph_ids
+        passage_ids = table_ids + [sep] + paragraph_ids
 
-    passage_ids = passage_ids + [sep_end]
+    passage_ids = passage_ids + [sep]+ num_ops * [opt] + [sep]
+
+    passage_length = len(passage_ids)
 
     input_ids[0, :question_length] = torch.from_numpy(np.array(question_ids))
     input_ids[0, question_length:question_length + len(passage_ids)] = torch.from_numpy(np.array(passage_ids))
@@ -658,6 +666,8 @@ def _concat(question_and_if_ids,
     
     paragraph_mask[0, 1: question_length - 1] = 1
     paragraph_mask[0, question_length + table_length + 1:question_length + table_length + 1 + paragraph_length] = 1
+
+    opt_mask[0,passage_length +1  : passage_length + num_ops + 1 ] = 1
     
     max_question_index = question_and_if_index[:question_length - 2][-1]
     if truncated_question == False:
