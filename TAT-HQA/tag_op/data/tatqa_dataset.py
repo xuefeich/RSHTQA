@@ -241,6 +241,113 @@ def table_tokenize(table, tokenizer, mapping, if_mapping):
             current_cell_index += 1
     return table_cell_tokens, table_ids, table_tags, table_if_tags, table_cell_number_value, table_cell_index, mapping_content
 
+def org_table_tokenize(table, tokenizer, mapping):
+    table_tags = []
+    table_mapping = False
+    answer_coordinates = None
+
+    if "table" in mapping and len(mapping["table"]) != 0:
+        table_mapping = True
+        answer_coordinates = mapping["table"]
+    for i in range(len(table)):
+        for j in range(len(table[i])):
+            cell_ids = string_tokenizer(table[i][j], tokenizer)
+            if not cell_ids:
+                continue
+            if table_mapping:
+                if [i, j] in answer_coordinates:
+                    table_tags += [1 for _ in range(len(cell_ids))]
+                else:
+                    table_tags += [0 for _ in range(len(cell_ids))]
+            else:
+                table_tags += [0 for _ in range(len(cell_ids))]
+    return table_tags
+def org_paragraph_tokenize(question, paragraphs, tokenizer, mapping):
+    paragraphs_copy = paragraphs.copy()
+    paragraphs = {}
+    for paragraph in paragraphs_copy:
+        paragraphs[paragraph["order"]] = paragraph["text"]
+    del paragraphs_copy
+    split_tokens = []
+    split_tags = []
+    number_mask = []
+    number_value = []
+    tokens = []
+    tags = []
+    word_piece_mask = []
+    paragraph_index = []
+
+    paragraph_mapping = False
+    paragraph_mapping_orders = []
+    if "paragraph" in list(mapping.keys()) and len(mapping["paragraph"].keys()) != 0:
+        paragraph_mapping = True
+        paragraph_mapping_orders = list(mapping["paragraph"].keys())
+    # apply tf-idf to calculate text-similarity
+    sorted_order = get_order_by_tf_idf(question, paragraphs)
+    for order in sorted_order:
+        text = paragraphs[order]
+        prev_is_whitespace = True
+        answer_indexs = None
+        if paragraph_mapping and str(order) in paragraph_mapping_orders:
+            answer_indexs = mapping["paragraph"][str(order)]
+        current_tags = [0 for i in range(len(text))]
+        if answer_indexs is not None:
+            for answer_index in answer_indexs:
+                current_tags[answer_index[0]:answer_index[1]] = \
+                    [1 for i in range(len(current_tags[answer_index[0]:answer_index[1]]))]
+
+        start_index = 0
+        wait_add = False
+        for i, c in enumerate(text):
+            if is_whitespace(c):  # or c in ["-", "–", "~"]:
+                if wait_add:
+                    if 1 in current_tags[start_index:i]:
+                        tags.append(1)
+                    else:
+                        tags.append(0)
+                    wait_add = False
+                prev_is_whitespace = True
+            elif c in ["-", "–", "~"]:
+                if wait_add:
+                    if 1 in current_tags[start_index:i]:
+                        tags.append(1)
+                    else:
+                        tags.append(0)
+                    wait_add = False
+                tokens.append(c)
+                tags.append(0)
+                prev_is_whitespace = True
+            else:
+                if prev_is_whitespace:
+                    tokens.append(c)
+                    wait_add = True
+                    start_index = i
+                else:
+                    tokens[-1] += c
+                prev_is_whitespace = False
+        if wait_add:
+            if 1 in current_tags[start_index:len(text)]:
+                tags.append(1)
+            else:
+                tags.append(0)
+
+    try:
+        assert len(tokens) == len(tags)
+    except AssertionError:
+        print(len(tokens), len(tags))
+        input()
+    current_token_index = 1
+    for i, token in enumerate(tokens):
+        if i != 0:
+            sub_tokens = tokenizer._tokenize(" " + token)
+        else:
+            sub_tokens = tokenizer._tokenize(token)
+
+        for sub_token in sub_tokens:
+            split_tags.append(tags[i])
+        current_token_index+=1
+    return split_tags
+
 
 def question_if_part_tokenize(question, question_if_text, tokenizer, mapping, if_mapping):
     mapping_content = []
@@ -466,139 +573,7 @@ def paragraph_tokenize(question, paragraphs, tokenizer, mapping, if_mapping):
            paragraph_index, mapping_content
 
 
-#def question_tokenizer(question_text, tokenizer):
-#    return string_tokenizer(question_text, tokenizer)
 
-def get_number_order_labels(paragraphs, table, question_if_part, counter_derivation, operator_class, if_mapping, original_answer_mapping, question_id, OPERATOR_CLASSES, mode='train'):
-    answer_mapping = original_answer_mapping
-
-    if operator_class == 'Change ratio':
-        operator_class = OPERATOR_CLASSES["CHANGE_RATIO"]
-    elif operator_class == 'Difference':
-        operator_class = OPERATOR_CLASSES["DIFF"]
-    elif operator_class == 'Division':
-        operator_class = OPERATOR_CLASSES["DIVIDE"]
-
-    if ("DIVIDE" not in OPERATOR_CLASSES or operator_class != OPERATOR_CLASSES["DIVIDE"]) and \
-            ("CHANGE_RATIO" not in OPERATOR_CLASSES or operator_class != OPERATOR_CLASSES["CHANGE_RATIO"]) and \
-            ("DIFF" not in OPERATOR_CLASSES or operator_class != OPERATOR_CLASSES["DIFF"]):
-        return -1 # no need for other operators
-    paragraphs_copy = paragraphs.copy()
-    paragraphs = {}
-    for paragraph in paragraphs_copy:
-        paragraphs[paragraph["order"]] = paragraph["text"]
-    del paragraphs_copy
-    #print("checking number order")
-    #print(counter_derivation)
-    operands = get_operands(counter_derivation)
-    #print(operands)
-    first_operand, second_operand = operands[0], operands[1]
-    # one is inside table/paragraph, one is new.
-    answer_from = original_answer_mapping.keys()
-    table_answer_coordinates = None
-    paragraph_answer_coordinates = None
-    if "table" in answer_from:
-        table_answer_coordinates = original_answer_mapping["table"]
-    if "paragraph" in answer_from:
-        paragraph_answer_coordinates = original_answer_mapping["paragraph"]
-    table_answer_nums, paragraph_answer_nums = get_answer_nums(table_answer_coordinates, paragraph_answer_coordinates)
-    if (table_answer_nums + paragraph_answer_nums) < 2:
-        # print("the same number to skip it: derivation")
-        if mode == 'train':
-            raise RuntimeError(f" skip this the derivation is {counter_derivation} {table_answer_nums} {paragraph_answer_nums} {original_answer_mapping}")
-        else:
-            return -1 # if running this at to_test_instance to obtain gt label, will not raise error.
-    if table_answer_nums == 2:
-        # if "table" not in if_mapping:
-        #    raise RuntimeError("table not in if mapping", if_mapping)
-        answer_coordinates = original_answer_mapping["table"]
-        answer_coordinates_copy = answer_coordinates.copy()
-        answer_coordinates = [(answer_coordinate[0], answer_coordinate[1]) for answer_coordinate in
-                              answer_coordinates_copy]
-        del answer_coordinates_copy
-        operand_one = to_number(table.iloc[answer_coordinates[0][0], answer_coordinates[0][1]])
-        operand_two = to_number(table.iloc[answer_coordinates[1][0], answer_coordinates[1][1]])
-        # operand 1 is at former location.
-        if answer_coordinates[1][0] < answer_coordinates[0][0] or (answer_coordinates[1][0] == answer_coordinates[0][0] and \
-                    answer_coordinates[1][1] < answer_coordinates[0][1]):
-            operand_one, operand_two = operand_two, operand_one
-        #print('table original operands', operand_one, operand_two)
-        if round(operand_one, 2) == round(first_operand, 2) or round(operand_two, 2) == round(second_operand, 2):
-            return 0
-        elif round(operand_one, 2) == round(second_operand, 2) or round(operand_two, 2) == round(first_operand, 2):
-            return 1
-        else:
-            #print(operand_one, operand_two, first_operand, second_operand)
-            #print(if_mapping, original_answer_mapping)
-            if mode == 'train':
-                raise RuntimeError("operand mismatch!")
-            else:
-                return -1
-        
-    elif paragraph_answer_nums == 2:
-        #if "paragraph" not in if_mapping:
-        #    raise RuntimeError("paragraph not in if mapping", if_mapping)
-        paragraph_mapping_orders = list(answer_mapping["paragraph"].keys())
-        if len(paragraph_mapping_orders) == 1:
-            answer_one_order, answer_two_order = (paragraph_mapping_orders[0], paragraph_mapping_orders[0])
-            answer_one_start = answer_mapping["paragraph"][answer_one_order][0][0]
-            answer_one_end = answer_mapping["paragraph"][answer_one_order][0][1]
-            answer_two_start = answer_mapping["paragraph"][answer_two_order][1][0]
-            answer_two_end = answer_mapping["paragraph"][answer_two_order][1][1]
-        else:
-            answer_one_order = paragraph_mapping_orders[0]
-            answer_two_order = paragraph_mapping_orders[1]
-            answer_one_start = answer_mapping["paragraph"][answer_one_order][0][0]
-            answer_one_end = answer_mapping["paragraph"][answer_one_order][0][1]
-            answer_two_start = answer_mapping["paragraph"][answer_two_order][0][0]
-            answer_two_end = answer_mapping["paragraph"][answer_two_order][0][1]
-        operand_one = to_number(paragraphs[int(answer_one_order)][answer_one_start:answer_one_end])
-        operand_two = to_number(paragraphs[int(answer_two_order)][answer_two_start:answer_two_end])
-        if answer_one_order > answer_two_order or (answer_one_order == answer_two_order and answer_one_start > answer_two_start):
-            operand_one, operand_two = operand_two, operand_one
-        #print('para original operands', operand_one, operand_two)
-        if round(operand_one, 2) == round(first_operand, 2) or round(operand_two, 2) == round(second_operand, 2):
-            return 0
-        elif round(operand_one, 2) == round(second_operand, 2) or round(operand_two, 2) == round(first_operand, 2):
-            return 1
-        else:
-            #print(operand_one, operand_two, first_operand, second_operand, operand_in_counter_tp)
-            if mode == 'train':
-                raise RuntimeError("operand mismatch!")
-            else:
-                return -1
-    else:
-        #if "table" not in answer_mapping or "paragraph" not in answer_mapping:
-        #    raise RuntimeError("unexpected if mapping", if_mapping)
-        if "table" not in answer_mapping:
-            if mode == 'train':
-                raise RuntimeError("missing table mapping", answer_mapping)
-            else:
-                return -1
-        if "paragraph" not in answer_mapping:
-            if mode == 'train':
-                raise RuntimeError("missing paragraph mapping", answer_mapping)
-            else:
-                return -1
-        answer_coordinates = answer_mapping["table"]
-        operand_one = to_number(table.iloc[answer_coordinates[0][0], answer_coordinates[0][1]])
-        paragraph_mapping_orders = list(answer_mapping["paragraph"].keys())
-        answer_two_order = paragraph_mapping_orders[0]
-        answer_two_start = answer_mapping["paragraph"][answer_two_order][0][0]
-        answer_two_end = answer_mapping["paragraph"][answer_two_order][0][1]
-        operand_two = to_number(paragraphs[int(answer_two_order)][answer_two_start:answer_two_end])
-        #print('tp original operands', operand_one, operand_two)
-        if round(operand_one, 2) == round(first_operand, 2) or round(operand_two, 2) == round(second_operand, 2):
-            return 0
-        elif round(operand_one, 2) == round(second_operand, 2) or round(operand_two, 2) == round(first_operand, 2):
-            return 1
-        else:
-            # print(operand_one, operand_two, first_operand, second_operand, operand_in_counter_tp)
-            if mode == 'train':
-                raise RuntimeError("operand mismatch!")
-            else:
-                return -1
-            
 def _concat(question_and_if_ids,
             question_and_if_tags,
             question_and_if_if_tags,
@@ -617,8 +592,7 @@ def _concat(question_and_if_ids,
             table_if_tags,
             table_cell_index,
             table_cell_number_value,
-            sep_start,
-            sep_end,
+            sep,
             question_length_limitation,
             passage_length_limitation,
             max_pieces):
@@ -827,7 +801,7 @@ answer: str. The answer used to calculate metrics.
 class TagTaTQAReader(object):
     def __init__(self, tokenizer,
                  passage_length_limit: int = None, question_length_limit: int = None, sep="<s>", op_mode:int=8,
-                 ablation_mode:int=0,num_ops ：6):
+                 ablation_mode:int=0,num_ops ：int = 6):
         self.max_pieces = 512
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
@@ -838,6 +812,7 @@ class TagTaTQAReader(object):
         self.op_mode=op_mode
 
         self.num_ops = num_ops
+        self.ari_ops = ARITHMETIC_CLASSES_
                      
         if ablation_mode == 0:
             self.OPERATOR_CLASSES=OPERATOR_CLASSES_
@@ -885,26 +860,109 @@ class TagTaTQAReader(object):
                      answer_type: str, answer:str, counter_derivation: str, original_derivation: str, counter_facts:list,  original_answer_mapping: Dict,
                      if_mapping: Dict, if_operator:str, counter_answer_mapping:Dict, counter_scale: str, question_id: str, is_counter: int):
         
+        question_and_if_tokens, question_and_if_ids, question_and_if_tags, question_and_if_if_tags, _,_, \
+                question_and_if_number_value, question_and_if_index, question_if_part_indicator, _= \
+            question_if_part_tokenize(question_text, question_if_text, self.tokenizer, original_answer_mapping, if_mapping)
 
+        table_cell_tokens, table_ids, table_tags, table_if_tags, table_cell_number_value, table_cell_index, _ = table_tokenize(table, self.tokenizer, original_answer_mapping, if_mapping)
+        paragraph_tokens, paragraph_ids, paragraph_tags, paragraph_if_tags, paragraph_word_piece_mask, paragraph_number_mask, \
+                paragraph_number_value, paragraph_index, _= paragraph_tokenize(question_text, paragraphs, self.tokenizer, original_answer_mapping, if_mapping)
+                         
         order_labels = np.zeros(self.num_ops)
 
         if answer_type == "arithmetic":
-            operator_class = self.OPERATOR_CLASSES["ARITHMETIC"]
-            num_facts = facts_to_nums(facts)
-        
-        counter_operator_class = get_operator_class(counter_derivation, answer_type, counter_facts, answer,
+            counter_operator_class = self.OPERATOR_CLASSES["ARITHMETIC"]
+            num_facts = facts_to_nums(counter_facts)
+
+            isavg = 0
+            try:
+               if _is_average(num_facts,answer):
+                   ari_ops = [self.ari_ops['AVERAGE']]
+                   ari_tags = {'table':[table_tags],'para':[paragraph_tags],'operation':[[0]*self.num_ops]}
+                   isavg = 1
+            except:
+                isavg = 0
+            if isavg == 0:
+               dvt_split_suc = 0
+               try:
+                    ari_operations = infix_evaluator(original_derivation)
+                    dvt_split_suc = 1
+                    if len(ari_operations) > self.num_ops:
+                        operator_class = None
+                        dvt_split_suc = 0
+               except:
+                   print("derivation split err")
+                   counter_operator_class = None
+                if dvt_split_suc == 1:
+                   ari_ops = [self.ari_ops[i[0]] for i in ari_operations]
+                   operands = [i[1:] for i in ari_operations]
+                   ari_tags = {'table':[],'para':[],'operation':[]}
+                   for i,opds in enumerate(operands): 
+                       temp_mapping,operand_one_mapping,operand_two_mapping = split_mapping(opds,original_answer_mapping,table,paragraphs)
+                       if temp_mapping == None:
+                           operator_class = None
+                           break
+                       else:
+                           if ari_operations[i][0] in ['DIFF','DIVIDE']:
+                              if "table" in operand_one_mapping and "table" in operand_two_mapping:
+                                  if operand_one_mapping["table"][0][0] > operand_two_mapping["table"][0][0]:
+                                      order_labels[i] = 1
+                                  elif operand_one_mapping["table"][0][1] > operand_two_mapping["table"][0][1]:
+                                      order_labels[i] = 1
+                              elif "paragraph" in operand_one_mapping and "table" in operand_two_mapping:
+                                  order_labels[i] = 1
+                              elif "paragraph" in operand_one_mapping and "paragraph" in operand_two_mapping:
+                                  opd1_pid = list(operand_one_mapping["paragraph"].keys())[0]
+                                  opd2_pid = list(operand_two_mapping["paragraph"].keys())[0]
+                                  if int(opd1_pid) > int(opd2_pid):
+                                      order_labels[i] = 1
+                                  elif operand_one_mapping["paragraph"][opd1_pid][0][0] > operand_two_mapping["paragraph"][opd2_pid][0][0]:
+                                      order_labels[i] = 1
+
+                              op1_table_tags = org_table_tokenize(table,self.tokenizer,operand_one_mapping,answer_type)
+
+                              op1_para_tags = org_paragraph_tokenize(question, paragraphs, self.tokenizer, operand_one_mapping, answer_type)
+                              op2_table_tags = org_table_tokenize(table,self.tokenizer,operand_two_mapping,answer_type)
+                              op2_para_tags = org_paragraph_tokenize(question, paragraphs, self.tokenizer, operand_two_mapping, answer_type)
+                              ari_tags['table'].append({"operand1":op1_table_tags,"operand2":op2_table_tags})
+                              ari_tags['para'].append({"operand1":op1_para_tags,"operand2":op2_para_tags})
+                              op1_tags = [0] * self.num_ops
+                              op2_tags = [0] * self.num_ops
+                              if 'operator' in operand_one_mapping:
+                                  for i in operand_one_mapping['operator']:
+                                      op1_tags[i] = 1
+                              if 'operator' in operand_two_mapping:
+                                  for i in operand_two_mapping['operator']:
+                                      op2_tags[i] = 1
+                              ari_tags['operation'].append({"operand1":op1_tags,"operand2":op2_tags})
+
+                           else:
+                              temp_table_tags = org_table_tokenize(table,self.tokenizer,temp_mapping,answer_type)
+                              temp_para_tags= org_paragraph_tokenize(question, paragraphs, self.tokenizer, temp_mapping, answer_type)
+                              ari_tags['table'].append(temp_table_tags)
+                              ari_tags['para'].append(temp_para_tags)
+                              temp_op_tags = [0] * self.num_ops
+                              if 'operator' in temp_mapping:
+                                  for i in temp_mapping['operator']:
+                                      temp_op_tags[i] = 1
+                              ari_tags['operation'].append(temp_op_tags)
+
+        elif answer_type == "count":
+            counter_operator_class = self.OPERATOR_CLASSES["COUNT"]
+            ari_ops = None
+            ari_tags = None
+        else:
+            counter_operator_class = get_operator_class(counter_derivation, answer_type, counter_facts, answer,
                                             counter_answer_mapping, counter_scale, self.OPERATOR_CLASSES)
+            ari_ops = None
+            ari_tags = None
+        
         counter_scale_class = SCALE.index(counter_scale)
         if_operator_class = IF_OPERATOR_CLASSES_[if_operator]
         
         if counter_operator_class is None:
             self.skip_count += 1
             return None
-
-        table_cell_tokens, table_ids, table_tags, table_if_tags, table_cell_number_value, table_cell_index, _ = \
-                            table_tokenize(table, self.tokenizer, original_answer_mapping, if_mapping)
-
-        
         for i in range(len(table)):
             for j in range(len(table[i])):
                 if table[i][j] == '' or table[i][j] == 'N/A' or table[i][j] == 'n/a':
@@ -914,39 +972,67 @@ class TagTaTQAReader(object):
         for column_name in table.columns.values.tolist():
             column_relation[column_name] = str(column_name)
         table.rename(columns=column_relation, inplace=True)
-
-        paragraph_tokens, paragraph_ids, paragraph_tags, paragraph_if_tags, paragraph_word_piece_mask, paragraph_number_mask, \
-                paragraph_number_value, paragraph_index, _= \
-            paragraph_tokenize(question_text, paragraphs, self.tokenizer, original_answer_mapping, if_mapping)
         
-        
-        
-        question_and_if_tokens, question_and_if_ids, question_and_if_tags, question_and_if_if_tags, _,_, \
-                question_and_if_number_value, question_and_if_index, question_if_part_indicator, _= \
-            question_if_part_tokenize(question_text, question_if_text, self.tokenizer, original_answer_mapping, if_mapping)
-
-            
-        number_order_label = get_number_order_labels(paragraphs, table, question_text, counter_derivation, counter_operator_class,
-                                                     if_mapping, original_answer_mapping, question_id, self.OPERATOR_CLASSES)
         
         concat_params = {"question_and_if_ids": question_and_if_ids, "question_and_if_tags": question_and_if_tags, "question_and_if_if_tags": question_and_if_if_tags,
                          "question_and_if_index": question_and_if_index, "question_if_part_indicator": question_if_part_indicator, "question_and_if_number_value": question_and_if_number_value, "question_and_if_tokens": question_and_if_tokens,
                          "paragraph_ids": paragraph_ids, "paragraph_tags": paragraph_tags, "paragraph_if_tags": paragraph_if_tags, "paragraph_index": paragraph_index,"paragraph_number_value": paragraph_number_value, "paragraph_tokens": paragraph_tokens,
                          "table_ids": table_ids, "table_tags": table_tags, "table_if_tags": table_if_tags, "table_cell_index": table_cell_index, "table_cell_number_value": table_cell_number_value,
-                         "sep_start": self.sep_start, "sep_end": self.sep_end, "question_length_limitation": self.question_length_limit, "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces}
+                         "sep": self.sep,"question_length_limitation": self.question_length_limit, "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces,
+                         "opt":self.opt,"num_ops":self.num_ops,"ari_tags":ari_tags}
         
         input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-        table_mask, table_cell_number_value, table_cell_index, tags, if_tags, input_segments = _concat(**concat_params)
+        table_mask, table_cell_number_value, table_cell_index, tags, if_tags, input_segments, opt_mask,ari_round_labels = _concat(**concat_params)
+
+        opt_labels = torch.zeros(1,self.num_ops - 1 , self.num_ops-1)
+        if answer_type == "arithmetic":
+            ari_round_labels = torch.where(tags > 0 ,ari_round_labels,-100)
+            if len(ari_ops) >= 2:
+                for i in range(1 , len(ari_ops)):
+                    opt_tags = ari_tags["operation"][i]
+                    if isinstance(opt_tags , dict):
+                        opd1_opt_tags = opt_tags["operand1"]
+                        for j in range(self.num_ops-1):
+                            if opd1_opt_tags[j] == 1:
+                                opt_labels[0,j,i-1] = 1
+                        opd2_opt_tags = opt_tags["operand2"]
+                        for j in range(self.num_ops-1):
+                            if opd2_opt_tags[j] == 1:
+                                opt_labels[0,j,i-1] = 2
+                    else:
+                        for j in range(self.num_ops-1):
+                            if opt_tags[j] == 1:
+                                opt_labels[0,j,i-1] = 1
 
         
         answer_dict = {"answer_type": answer_type, "answer": answer, "scale": counter_scale, "answer_from": answer_from, "gold_if_op": if_operator}
+
         
-        make_instance = {"input_ids": np.array(input_ids), "qtp_attention_mask":  np.array(qtp_attention_mask),
+        
+        make_instance = {
+        "input_ids": np.array(input_ids), 
+        "qtp_attention_mask":  np.array(qtp_attention_mask),
         "question_if_part_attention_mask": np.array(question_if_part_attention_mask),
-        "token_type_ids": np.array(input_segments), "paragraph_mask":np.array(paragraph_mask), "paragraph_number_value": np.array(paragraph_number_value), "paragraph_index": np.array(paragraph_index), "paragraph_tokens": paragraph_tokens,
-        "table_mask": np.array(table_mask), "table_cell_number_value": np.array(table_cell_number_value), "table_cell_index": np.array(table_cell_index), "table_cell_tokens": table_cell_tokens, "number_order_labels": int(number_order_label),
-        "tag_labels": np.array(tags), "if_tag_labels": np.array(if_tags), "operator_labels": int(counter_operator_class), "if_operator_labels": int(if_operator_class), "scale_labels": int(counter_scale_class),
-        "answer_dict": answer_dict, "question_id": question_id, "is_counter_arithmetic": int(is_counter == 1 and answer_type == 'arithmetic'), "is_original": 1 - is_counter}
+        "token_type_ids": np.array(input_segments),
+        "paragraph_mask":np.array(paragraph_mask), 
+        "paragraph_number_value": np.array(paragraph_number_value), 
+        "paragraph_index": np.array(paragraph_index), 
+        "paragraph_tokens": paragraph_tokens,
+        "table_mask": np.array(table_mask), 
+        "table_cell_number_value": np.array(table_cell_number_value), 
+        "table_cell_index": np.array(table_cell_index), 
+        "table_cell_tokens": table_cell_tokens, 
+        "number_order_labels": int(number_order_label),
+        "tag_labels": np.array(tags), 
+        "if_tag_labels": np.array(if_tags), 
+        "operator_labels": int(counter_operator_class), 
+        "if_operator_labels": int(if_operator_class), 
+        "scale_labels": int(counter_scale_class),
+        "answer_dict": answer_dict, 
+        "question_id": question_id, 
+        "is_counter_arithmetic": int(is_counter == 1 and answer_type == 'arithmetic'), 
+        "is_original": 1 - is_counter
+        }
         
         return make_instance
 
@@ -1011,20 +1097,6 @@ class TagTaTQAReader(object):
                         instances.append(instance)
                 except RuntimeError as e :
                     pass
-                    #print(f"run time error:{e}" )
-                    #print(question_answer["uid"])
-                #except KeyError:
-                #    key_error_count += 1
-                #    print(question_answer["uid"])
-                #    print("KeyError. Total Error Count: {}".format(key_error_count))
-                #except IndexError:
-                #    index_error_count += 1
-                #    print(question_answer["uid"])
-                #    print("IndexError. Total Error Count: {}".format(index_error_count))
-                #except AssertionError:
-                #    assert_error_count += 1
-                #    print(question_answer["uid"])
-                #    print("AssertError. Total Error Count: {}".format(assert_error_count))
         print('total instance numbers', len(instances))
         return instances
 
