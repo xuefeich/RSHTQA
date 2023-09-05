@@ -111,7 +111,6 @@ def main():
         share_param=args.share_param,
         #operator_criterion = nn.CrossEntropyLoss(),
         #scale_criterion = nn.CrossEntropyLoss(),
-        arithmetic_op_index = arithmetic_op_index,
         op_mode = args.op_mode,
         ablation_mode = args.ablation_mode,
     )
