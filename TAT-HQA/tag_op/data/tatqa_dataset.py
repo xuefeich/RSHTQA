@@ -938,7 +938,7 @@ class TagTaTQAReader(object):
                    for i,opds in enumerate(operands): 
                        temp_mapping,operand_one_mapping,operand_two_mapping = split_mapping(opds,original_answer_mapping,table,paragraphs)
                        if temp_mapping == None:
-                           operator_class = None
+                           counter_operator_class = None
                            break
                        else:
                            if ari_operations[i][0] in ['DIFF','DIVIDE']:
