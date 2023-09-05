@@ -114,6 +114,7 @@ class TagopModel(nn.Module):
                  if_operator_classes:int,
                  scale_classes: int, # 5
                  ari_classes:int,
+                 num_ops:int,
                  num_head: int,
                  cross_attn_layer: int,
                  ca_with_self: int,
@@ -129,6 +130,7 @@ class TagopModel(nn.Module):
         self.operator_classes = operator_classes
         self.if_operator_classes = if_operator_classes
         self.scale_classes = scale_classes
+        self.num_ops = num_ops
         self._metrics = TaTQAEmAndF1(mode=2)
         if hidden_size is None:
             hidden_size = self.config.hidden_size
@@ -291,8 +293,6 @@ class TagopModel(nn.Module):
         table_sequence_output = util.replace_masked_values(sequence_output, table_mask.unsqueeze(-1), 0)
 
         concatenated_qtp_if = sequence_output + if_sequence_output
-
-        
                     
         total_if_tag_prediction = self.if_tag_predictor(concatenated_qtp_if)
         total_if_tag_prediction = util.replace_masked_values(total_if_tag_prediction, total_attention_mask.unsqueeze(-1), 0)
