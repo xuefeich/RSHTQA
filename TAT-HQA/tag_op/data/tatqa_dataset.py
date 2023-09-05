@@ -647,9 +647,9 @@ def _concat(question_and_if_ids,
     else:
         passage_ids = table_ids + [sep] + paragraph_ids
 
-    passage_ids = passage_ids + [sep]+ num_ops * [opt] + [sep]
-
     passage_length = len(passage_ids)
+
+    passage_ids = passage_ids + [sep]+ num_ops * [opt] + [sep]
 
     input_ids[0, :question_length] = torch.from_numpy(np.array(question_ids))
     input_ids[0, question_length:question_length + len(passage_ids)] = torch.from_numpy(np.array(passage_ids))
@@ -780,6 +780,7 @@ def _test_concat(question_and_if_ids,
     else:
         passage_ids = table_ids + [sep] + paragraph_ids
 
+    passage_length = len(passage_ids)
     passage_ids = passage_ids + [sep]+ num_ops * [opt] + [sep]
 
     input_ids[0, :question_length] = torch.from_numpy(np.array(question_ids))
