@@ -957,11 +957,11 @@ class TagTaTQAReader(object):
                                   elif operand_one_mapping["paragraph"][opd1_pid][0][0] > operand_two_mapping["paragraph"][opd2_pid][0][0]:
                                       order_labels[i] = 1
 
-                              op1_table_tags = org_table_tokenize(table,self.tokenizer,operand_one_mapping,answer_type)
+                              op1_table_tags = org_table_tokenize(table,self.tokenizer,operand_one_mapping)
 
-                              op1_para_tags = org_paragraph_tokenize(question, paragraphs, self.tokenizer, operand_one_mapping, answer_type)
-                              op2_table_tags = org_table_tokenize(table,self.tokenizer,operand_two_mapping,answer_type)
-                              op2_para_tags = org_paragraph_tokenize(question, paragraphs, self.tokenizer, operand_two_mapping, answer_type)
+                              op1_para_tags = org_paragraph_tokenize(question_text, paragraphs, self.tokenizer, operand_one_mapping)
+                              op2_table_tags = org_table_tokenize(table,self.tokenizer,operand_two_mapping)
+                              op2_para_tags = org_paragraph_tokenize(question_text, paragraphs, self.tokenizer, operand_two_mapping)
                               ari_tags['table'].append({"operand1":op1_table_tags,"operand2":op2_table_tags})
                               ari_tags['para'].append({"operand1":op1_para_tags,"operand2":op2_para_tags})
                               op1_tags = [0] * self.num_ops
@@ -975,8 +975,8 @@ class TagTaTQAReader(object):
                               ari_tags['operation'].append({"operand1":op1_tags,"operand2":op2_tags})
 
                            else:
-                              temp_table_tags = org_table_tokenize(table,self.tokenizer,temp_mapping,answer_type)
-                              temp_para_tags= org_paragraph_tokenize(question, paragraphs, self.tokenizer, temp_mapping, answer_type)
+                              temp_table_tags = org_table_tokenize(table,self.tokenizer,temp_mapping)
+                              temp_para_tags= org_paragraph_tokenize(question_text, paragraphs, self.tokenizer, temp_mapping)
                               ari_tags['table'].append(temp_table_tags)
                               ari_tags['para'].append(temp_para_tags)
                               temp_op_tags = [0] * self.num_ops
@@ -1067,7 +1067,7 @@ class TagTaTQAReader(object):
 
         if ari_ops == [-100] * self.num_ops:
             opt_labels[0,:,:] = -100
-            ari_labels[0,:,:] = -100
+            ari_round_labels[0,:,:] = -100
             order_labels[:] = -100
             number_indexes = []
             ari_sel_labels = []
@@ -1078,7 +1078,7 @@ class TagTaTQAReader(object):
                 for j in range(i):
                     opt_labels[0,i,j] = -100
                 if ari_ops[i] == 0:
-                    ari_labels[0,i:,:] = -100
+                    ari_round_labels[0,i:,:] = -100
                     opt_labels[0,i-1:,:] = -100
                     opt_labels[0,:,i-1:] = -100
 
@@ -1130,7 +1130,7 @@ class TagTaTQAReader(object):
                     else:
                         print("extract err")#if question_answer["uid"] in ignore_ids:
 
-            ari_sel_labels = ari_labels[0,:,distinct_si].transpose(0,1)
+            ari_sel_labels = ari_round_labels[0,:,distinct_si].transpose(0,1)
             if ari_sel_labels.shape[0] != len(number_indexes):
                 print(ari_sel_labels)
                 print(number_indexes)
