@@ -74,6 +74,8 @@ def main():
         bert_model = RobertaModel.from_pretrained(args.roberta_model)
     elif args.encoder == 'finbert':
         bert_model = BertModel.from_pretrained(args.finbert_model)
+    
+    bert_model.resize_token_embeddings(bert_model.config.vocab_size+1)
 
     if args.ablation_mode == 0: 
         operators = OPERATOR_CLASSES_
