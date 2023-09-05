@@ -89,7 +89,7 @@ class TaTQABatchGen(object):
             paragraph_mask_batch, paragraph_numbers_batch, paragraph_index_batch, paragraph_tokens_batch,\
             table_mask_batch, table_cell_numbers_batch, table_cell_index_batch, table_cell_tokens_batch,\
             tag_labels_batch, if_tag_labels_batch, operator_labels_batch, if_operator_labels_batch, scale_labels_batch, \
-            gold_answers_batch, question_ids_batch, counter_arithmetic_mask_batch, original_mask_batch \
+            gold_answers_batch, question_ids_batch, counter_arithmetic_mask_batch, original_mask_batch, \
             ari_ops_batch ,opt_labels_batch , ari_labels_batch,opt_mask_batch,order_labels_batch ,selected_indexes_batch = zip(*batch)
             
             bsz = len(batch)
