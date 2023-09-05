@@ -1518,7 +1518,7 @@ class TagTaTQATestReader(object):
 
                     if "original_answer_mapping" in question_answer:
                         original_answer_mapping = question_answer["original_answer_mapping"]
-                    elif "mapping" in in question_answer:
+                    elif "mapping" in question_answer:
                         original_answer_mapping = question_answer["mapping"]
                     else:
                         original_answer_mapping = None
