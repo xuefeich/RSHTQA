@@ -226,7 +226,7 @@ class TagopModel(nn.Module):
                 operator_labels: torch.LongTensor,
                 if_operator_labels: torch.LongTensor,
                 scale_labels: torch.LongTensor,
-                number_order_labels: torch.LongTensor,
+                order_labels: torch.LongTensor,
                 
                 counter_arithmetic_mask: torch.LongTensor, # the input tensor is not used here, re-calculated later
                 original_mask: torch.LongTensor, # the input is tensor not used here, re-calculated later
