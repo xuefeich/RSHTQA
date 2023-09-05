@@ -746,6 +746,7 @@ def _test_concat(question_and_if_ids,
     table_mask = torch.zeros_like(input_ids)
     table_index = torch.zeros_like(input_ids)
     question_if_part_attention_mask = torch.zeros_like(input_ids)
+    opt_mask = torch.zeros_like(input_ids)
 
     truncated_question = False
     if question_length_limitation is not None:
@@ -1445,7 +1446,7 @@ class TagTaTQATestReader(object):
                          "question_and_if_number_value": question_and_if_number_value, "question_and_if_tokens": question_and_if_tokens,
                          "paragraph_ids": paragraph_ids, "paragraph_index": paragraph_index,"paragraph_number_value": paragraph_number_value, "paragraph_tokens": paragraph_tokens,
                          "table_ids": table_ids,  "table_cell_index": table_cell_index, "table_cell_number_value": table_cell_number_value,
-                         "sep_start": self.sep, "question_length_limitation": self.question_length_limit, 
+                         "sep": self.sep, "question_length_limitation": self.question_length_limit, 
                          "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces,"opt":self.opt,"num_ops":self.num_ops}
 
         input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
