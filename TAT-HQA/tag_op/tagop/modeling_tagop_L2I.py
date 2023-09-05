@@ -451,8 +451,8 @@ class TagopModel(nn.Module):
         concatenated_qtp_if = sequence_output + if_sequence_output
 
         opt_output = torch.zeros([batch_size,self.num_ops,self.hidden_size],device = device)
-           for bsz in range(batch_size):
-              opt_output[bsz] = concatenated_qtp_if[bsz,opt_mask[bsz]:opt_mask[bsz]+self.num_ops,:]
+        for bsz in range(batch_size):
+            opt_output[bsz] = concatenated_qtp_if[bsz,opt_mask[bsz]:opt_mask[bsz]+self.num_ops,:]
         ari_ops_prediction = self.ari_predictor(opt_output)
         pred_ari_class = torch.argmax(ari_ops_prediction,dim = -1)
                     
