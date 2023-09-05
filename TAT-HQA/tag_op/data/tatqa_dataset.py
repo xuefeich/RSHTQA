@@ -730,11 +730,12 @@ def _test_concat(question_and_if_ids,
             table_ids,
             table_cell_index,
             table_cell_number_value,
-            sep_start,
-            sep_end,
+            sep,
             question_length_limitation,
             passage_length_limitation,
-            max_pieces):
+            max_pieces,
+            opt,
+            num_ops):
     in_table_cell_index = table_cell_index.copy()
     in_paragraph_index = paragraph_index.copy()
     
@@ -754,7 +755,7 @@ def _test_concat(question_and_if_ids,
             question_and_if_index = question_and_if_index[:question_length_limitation]
             truncated_question = True
     
-    question_ids = [sep_start] + question_and_if_ids + [sep_end]
+    question_ids = [sep] + question_and_if_ids + [sep]
     question_if_part_indicator = [0] + question_if_part_indicator
     question_if_part_attention_mask[0, :len(question_if_part_indicator)] = torch.from_numpy(np.array(question_if_part_indicator))
     
@@ -772,13 +773,13 @@ def _test_concat(question_and_if_ids,
             table_length = len(table_ids)
             paragraph_length = passage_length_limitation - table_length - 1
         else:
-            passage_ids = table_ids + [sep_end] + paragraph_ids
+            passage_ids = table_ids + [sep] + paragraph_ids
             table_length = len(table_ids)
             paragraph_length = len(paragraph_ids)
     else:
-        passage_ids = table_ids + [sep_end] + paragraph_ids
+        passage_ids = table_ids + [sep] + paragraph_ids
 
-    passage_ids = passage_ids + [sep_end]
+    passage_ids = passage_ids + [sep]+ num_ops * [opt] + [sep]
 
     input_ids[0, :question_length] = torch.from_numpy(np.array(question_ids))
     input_ids[0, question_length:question_length + len(passage_ids)] = torch.from_numpy(np.array(passage_ids))
@@ -793,6 +794,8 @@ def _test_concat(question_and_if_ids,
 
     paragraph_mask[0, 1: question_length - 1] = 1
     paragraph_mask[0, question_length + table_length + 1:question_length + table_length + 1 + paragraph_length] = 1
+
+    opt_mask[0,passage_length +1  : passage_length + num_ops + 1 ] = 1
     
     max_question_index = question_and_if_index[:question_length - 2][-1]
     if truncated_question == False:
@@ -809,7 +812,7 @@ def _test_concat(question_and_if_ids,
     paragraph_tokens = question_and_if_tokens[:max_question_index] + paragraph_tokens
     
     return input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-           table_mask, table_cell_number_value, table_index, input_segments
+           table_mask, table_cell_number_value, table_index, input_segments,opt_mask
 
 
 
@@ -1252,8 +1255,8 @@ class TagTaTQATestReader(object):
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
         self.question_length_limit = question_length_limit
-        self.sep_start = self.tokenizer._convert_token_to_id(sep)
-        self.sep_end = self.tokenizer._convert_token_to_id(sep)
+        self.sep = self.tokenizer._convert_token_to_id(sep)
+        self.opt = self.tokenizer.encode("<OPT>")[1]
         tokens = self.tokenizer._tokenize("Feb 2 Nov")
         self.skip_count = 0
         self.ablation_mode = ablation_mode
@@ -1330,11 +1333,6 @@ class TagTaTQATestReader(object):
 
     def _to_test_instance(self, question_text: str, question_if_text:str, table: List[List[str]], paragraphs: List[Dict], answer_from: str,
                           answer_type: str, answer:str, question_id:str, scale: str):
-        #print('question_text', question_text)
-        #print('question_if_text', question_if_text)
-        #print(counter_answer_mapping, original_answer_mapping, if_mapping, if_op)
-        #print(original_derivation, counter_derivation, counter_facts, answer)
-        #print(answer_type)
         
         dummy_dict = {}
         
@@ -1351,52 +1349,49 @@ class TagTaTQATestReader(object):
             column_relation[column_name] = str(column_name)
         table.rename(columns=column_relation, inplace=True)
 
-        #print('table_cell_tokens', table_cell_tokens)
-        #print('original_mapping', original_answer_mapping)
-        #print('table_tags', table_tags)
-        #print('if_mapping', if_mapping)
-        #print('table_if_tags', table_if_tags)
-        #print('table_cell_number_value', table_cell_number_value)
-        #print('table_cell_index', table_cell_index)
-        #print('table_mapping_content', table_mapping_content)
-
         paragraph_tokens, paragraph_ids, _, _, paragraph_word_piece_mask, paragraph_number_mask, \
                 paragraph_number_value, paragraph_index, _= \
             paragraph_tokenize(question_text, paragraphs, self.tokenizer, dummy_dict, dummy_dict)
 
-        #print('paragraph_tokens', paragraph_tokens)
-        #print('paragraph_tags',paragraph_tags)
-        #print('paragraph_if_tags', paragraph_if_tags)
-        #print('paragraph_number_value', paragraph_number_value)
-        #print('paragraph_index', paragraph_index)
-        #print('paragraph_mapping_content', paragraph_mapping_content)
 
 
         question_and_if_tokens, question_and_if_ids, _, _, _,_, \
                 question_and_if_number_value, question_and_if_index, question_if_part_indicator, _= \
             question_if_part_tokenize(question_text, question_if_text, self.tokenizer, dummy_dict, dummy_dict)
 
-        concat_params = {"question_and_if_ids": question_and_if_ids,
-                         "question_and_if_index": question_and_if_index, "question_if_part_indicator": question_if_part_indicator, "question_and_if_number_value": question_and_if_number_value, "question_and_if_tokens": question_and_if_tokens,
+        concat_params = {"question_and_if_ids": question_and_if_ids,"question_and_if_index": question_and_if_index, "question_if_part_indicator": question_if_part_indicator, 
+                         "question_and_if_number_value": question_and_if_number_value, "question_and_if_tokens": question_and_if_tokens,
                          "paragraph_ids": paragraph_ids, "paragraph_index": paragraph_index,"paragraph_number_value": paragraph_number_value, "paragraph_tokens": paragraph_tokens,
                          "table_ids": table_ids,  "table_cell_index": table_cell_index, "table_cell_number_value": table_cell_number_value,
-                         "sep_start": self.sep_start, "sep_end": self.sep_end, "question_length_limitation": self.question_length_limit, "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces}
+                         "sep_start": self.sep, "question_length_limitation": self.question_length_limit, 
+                         "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces,"opt":self.opt,"num_ops":self.num_ops}
 
         input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-        table_mask, table_cell_number_value, table_cell_index, input_segments = _test_concat(**concat_params)
-       
-        #if question_if_part_attention_mask.int().sum() == 0:
-        #    raise RuntimeError("empty question if part", question_if_text, question_if_part_indicator)
+        table_mask, table_cell_number_value, table_cell_index, input_segments,opt_mask = _test_concat(**concat_params)
+
+        opt_id = torch.nonzero(opt_mask == 1)[0,1]
             
         answer_dict = {"answer_type": answer_type, "answer": answer, "answer_from": answer_from , "scale": scale}
 
         self.scale_count[scale] += 1
 
-        make_instance = {"input_ids": np.array(input_ids), "qtp_attention_mask":  np.array(qtp_attention_mask),
-        "question_if_part_attention_mask": np.array(question_if_part_attention_mask),
-        "token_type_ids": np.array(input_segments), "paragraph_mask":np.array(paragraph_mask), "paragraph_number_value": np.array(paragraph_number_value), "paragraph_index": np.array(paragraph_index), "paragraph_tokens": paragraph_tokens,
-        "table_mask": np.array(table_mask), "table_cell_number_value": np.array(table_cell_number_value), "table_cell_index": np.array(table_cell_index), "table_cell_tokens": table_cell_tokens,
-        "answer_dict": answer_dict, "question_id": question_id }
+        make_instance = {
+            "input_ids": np.array(input_ids), 
+            "qtp_attention_mask":  np.array(qtp_attention_mask),
+            "question_if_part_attention_mask": np.array(question_if_part_attention_mask),
+            "token_type_ids": np.array(input_segments), 
+            "paragraph_mask":np.array(paragraph_mask), 
+            "paragraph_number_value": np.array(paragraph_number_value), 
+            "paragraph_index": np.array(paragraph_index), 
+            "paragraph_tokens": paragraph_tokens,
+            "table_mask": np.array(table_mask), 
+            "table_cell_number_value": np.array(table_cell_number_value), 
+            "table_cell_index": np.array(table_cell_index), 
+            "table_cell_tokens": table_cell_tokens,
+            "answer_dict": answer_dict, 
+            "question_id": question_id,
+            "opt_mask":opt_id
+            }
         
         return make_instance
 
@@ -1414,8 +1409,6 @@ class TagTaTQATestReader(object):
             table = one['table']['table']
             paragraphs = one['paragraphs']
             questions = one['questions']
-            #print('')
-            #print("***** Reading ... ", reading_cnt)
             reading_cnt += 1
             for question_answer in questions:
                 try:
@@ -1437,18 +1430,6 @@ class TagTaTQATestReader(object):
                         instances.append(instance)
                 except RuntimeError:
                     print(question_answer["uid"])
-                #except IndexError as e:
-                #    index_error_count += 1
-                #    print(question_answer["uid"])
-                #    print("IndexError. Total Error Count: {}".format(index_error_count))
-                #    print(e)
-                #except AssertionError:
-                #    assert_error_count += 1
-                #    print(question_answer["uid"])
-                #    print("AssertError. Total Error Count: {}".format(assert_error_count))
-                #except KeyError:
-                #    continue
-        #print(self.op_count)
         print(self.scale_count)
         self.op_count = {"Span-in-text": 0, "Cell-in-table": 0, "Spans": 0, "Sum": 0, "Count": 0, "Average": 0,
                          "Multiplication": 0, "Division": 0, "Difference": 0, "Change ratio": 0}
