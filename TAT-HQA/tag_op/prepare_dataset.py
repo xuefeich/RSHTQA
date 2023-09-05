@@ -2,19 +2,20 @@ import os
 import pickle
 import argparse
 from data.tatqa_dataset import TagTaTQATestReader, TagTaTQAReader
-from transformers.tokenization_roberta import RobertaTokenizer
+from transformers.models.roberta.tokenization_roberta import RobertaTokenizer
 
-from transformers import BertTokenizer
+from transformers.models.bert import BertTokenizer
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_path", type=str)
 parser.add_argument("--output_dir", type=str)
-parser.add_argument("--passage_length_limit", type=int, default=463)
+parser.add_argument("--passage_length_limit", type=int, default=457)
 parser.add_argument("--question_length_limit", type=int, default=46)
-parser.add_argument("--encoder", type=str, default="bert")
+parser.add_argument("--encoder", type=str, default="roberta")
 parser.add_argument("--mode", type=str, default='train')
 parser.add_argument("--roberta_model", type=str, default='')
 parser.add_argument("--data_format", type=str, default="tatqa_and_hqa_field_{}.json")
+parser.add_argument("--num_arithmetic_operators",type=int,default=6)
 
 args = parser.parse_args()
 
@@ -22,6 +23,7 @@ if args.encoder == 'roberta':
     # tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
     tokenizer = RobertaTokenizer.from_pretrained(args.roberta_model)
     sep = '<s>'
+    tokenizer.add_special_tokens({'additional_special_tokens':['<OPT>']})
 elif args.encoder == 'bert':
     tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
     sep = '[SEP]'
