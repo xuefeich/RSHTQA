@@ -180,10 +180,11 @@ class TaTQABatchGen(object):
             yield  out_batch
 
 class TaTQATestBatchGen(object):
-    def __init__(self, args, data_mode, encoder='roberta'):
+    def __init__(self, args, data_mode, num_ops, encoder='roberta'):
         dpath =  f"tagop_{encoder}_cached_{data_mode}.pkl"
         self.is_train = data_mode == "train"
         self.args = args
+        self.num_ops = num_ops
         print(os.path.join(args.test_data_dir, dpath))
         with open(os.path.join(args.test_data_dir, dpath), 'rb') as f:
             print("Load data from {}.".format(dpath))
@@ -205,11 +206,12 @@ class TaTQATestBatchGen(object):
             table_cell_tokens = item["table_cell_tokens"]
             gold_answers = item["answer_dict"]
             question_id = item["question_id"]
+            opt_mask = item["opt_mask"]
             all_data.append((input_ids, qtp_attention_mask,
                              question_if_part_attention_mask, token_type_ids,
                              paragraph_mask, paragraph_numbers, paragraph_index, paragraph_tokens,
                              table_mask, table_cell_numbers, table_cell_index, table_cell_tokens,
-                             gold_answers, question_id))
+                             gold_answers, question_id,opt_mask))
         print("Load data size {}.".format(len(all_data)))
         self.data = TaTQATestBatchGen.make_batches(all_data, args.batch_size if self.is_train else args.eval_batch_size,
                                                self.is_train)
@@ -246,7 +248,7 @@ class TaTQATestBatchGen(object):
             question_if_part_attention_mask_batch, token_type_ids_batch,\
             paragraph_mask_batch, paragraph_numbers_batch, paragraph_index_batch, paragraph_tokens_batch,\
             table_mask_batch, table_cell_numbers_batch, table_cell_index_batch, table_cell_tokens_batch,\
-            gold_answers_batch, question_ids_batch = zip(*batch)
+            gold_answers_batch, question_ids_batch,opt_mask_batch = zip(*batch)
             
             bsz = len(batch)
             input_ids = torch.LongTensor(bsz, 512)
@@ -263,6 +265,8 @@ class TaTQATestBatchGen(object):
             table_cell_tokens = []
             gold_answers = []
             question_ids = []
+
+            opt_mask = torch.LongTensor(bsz)
             
             for i in range(bsz):
                 input_ids[i] = input_ids_batch[i]
@@ -279,13 +283,14 @@ class TaTQATestBatchGen(object):
                 table_cell_tokens.append(table_cell_tokens_batch[i])
                 gold_answers.append(gold_answers_batch[i])
                 question_ids.append(question_ids_batch[i])
+                opt_mask[i] = opt_mask_batch[i]
+                
                 
             out_batch = {"input_ids": input_ids, "qtp_attention_mask":qtp_attention_mask,
                 "question_if_part_attention_mask": question_if_part_attention_mask, "token_type_ids":token_type_ids,
                 "paragraph_mask": paragraph_mask, "paragraph_numbers": paragraph_numbers, "paragraph_index": paragraph_index, "paragraph_tokens": paragraph_tokens,
                 "table_mask": table_mask, "table_cell_numbers": table_cell_numbers, "table_cell_index": table_cell_index, "table_cell_tokens": table_cell_tokens,
-                "gold_answers": gold_answers,
-                "question_ids": question_ids,
+                "gold_answers": gold_answers,"question_ids": question_ids,"opt_mask": opt_mask
             }
 
             if self.args.cuda:
