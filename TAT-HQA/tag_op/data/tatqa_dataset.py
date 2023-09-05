@@ -769,7 +769,7 @@ def _test_concat(question_and_if_ids,
             table_length = passage_length_limitation
             paragraph_length = 0
         elif len(table_ids) + len(paragraph_ids) + 1> passage_length_limitation:
-            passage_ids = table_ids + [sep_end] + paragraph_ids
+            passage_ids = table_ids + [sep] + paragraph_ids
             passage_ids = passage_ids[:passage_length_limitation]
             table_length = len(table_ids)
             paragraph_length = passage_length_limitation - table_length - 1
