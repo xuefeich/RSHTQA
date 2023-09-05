@@ -49,7 +49,7 @@ class TaTQABatchGen(object):
                              question_if_part_attention_mask, token_type_ids,
                              paragraph_mask, paragraph_numbers, paragraph_index, paragraph_tokens,
                              table_mask, table_cell_numbers, table_cell_index, table_cell_tokens,
-                             number_order_labels, tag_labels, if_tag_labels, operator_labels, if_operator_labels, scale_labels,
+                             tag_labels, if_tag_labels, operator_labels, if_operator_labels, scale_labels,
                              gold_answers, question_id, counter_arithmetic_mask, original_mask,ari_ops,opt_labels,ari_labels,opt_mask,order_labels,selected_indexes))
         print("Load data size {}.".format(len(all_data)))
         self.data = TaTQABatchGen.make_batches(all_data, args.batch_size if self.is_train else args.eval_batch_size,
