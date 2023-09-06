@@ -846,7 +846,7 @@ class TagopModel(nn.Module):
 
             output_dict[question_ids[bsz]] = {"answer": answer, "scale": SCALE[int(predicted_scale_class[bsz])]}
             
-            if int(predicted_operator_class[bsz]) == self.OPERATOR_CLASSES["Arithmetic"]:
+            if int(predicted_operator_class[bsz]) == self.OPERATOR_CLASSES["ARITHMETIC"]:
                 predict_type = "arithmetic"
             else:
                 predict_type = ""
