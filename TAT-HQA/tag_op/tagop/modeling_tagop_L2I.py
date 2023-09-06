@@ -457,6 +457,7 @@ class TagopModel(nn.Module):
             opt_output[bsz] = concatenated_qtp_if[bsz,opt_mask[bsz]:opt_mask[bsz]+self.num_ops,:]
         ari_ops_prediction = self.ari_predictor(opt_output)
         pred_ari_class = torch.argmax(ari_ops_prediction,dim = -1)
+        pred_ari_class_fst = torch.argmax(ari_ops_prediction[:,:,1:],dim = -1)
                     
         total_if_tag_prediction = self.if_tag_predictor(concatenated_qtp_if)
         total_if_tag_prediction = util.replace_masked_values(total_if_tag_prediction, total_attention_mask.unsqueeze(-1), 0)
@@ -717,15 +718,17 @@ class TagopModel(nn.Module):
                         selected_numbers_labels = [pred_ari_tags_class[i] for i in range(num_numbers) if number_indexes_batch[i,0] == bsz]
                         temp_ans = []
                         for roud in range(self.num_ops):
+                            cur_pred_ari_class = pred_ari_class[bsz,roud]
                             if "STP" in self.ARI_CLASSES and pred_ari_class[bsz,roud] == self.ARI_CLASSES["STP"]:
                                 if roud == 0:
-                                    answer = ""
-                                    print("stop at first round")
-                                    current_ops[roud] = "Stop"
+                                    #answer = ""
+                                    #print("stop at first round")
+                                    #current_ops[roud] = "Stop"
+                                    cur_pred_ari_class = pred_ari_class_fst[bsz,roud]+1
                                 else:
                                     answer = temp_ans[-1]
                                     current_ops[roud] = "Stop"
-                                break
+                                    break
                             roud_selected_numbers = [selected_numbers[i] for i in range(len(selected_numbers)) if selected_numbers_labels[i][roud] != 0]
                             for rnum in roud_selected_numbers:
                                 if rnum not in pred_operands:
@@ -752,13 +755,13 @@ class TagopModel(nn.Module):
                             else:
                                 if len(roud_selected_numbers) == 0:
                                     roud_selected_numbers = selected_numbers
-                                if "SUM" in self.ARI_CLASSES and pred_ari_class[bsz,roud] == self.ARI_CLASSES["SUM"]:
+                                if "SUM" in self.ARI_CLASSES and cur_pred_ari_class == self.ARI_CLASSES["SUM"]:
                                     temp_ans.append(np.sum(roud_selected_numbers))
                                     current_ops[roud] = "Sum"
-                                elif "TIMES" in self.ARI_CLASSES and pred_ari_class[bsz,roud] == self.ARI_CLASSES["TIMES"]:
+                                elif "TIMES" in self.ARI_CLASSES and cur_pred_ari_class == self.ARI_CLASSES["TIMES"]:
                                     temp_ans.append(np.prod(roud_selected_numbers))
                                     current_ops[roud] = "Multiplication"
-                                elif "AVERAGE" in self.ARI_CLASSES and pred_ari_class[bsz,roud] == self.ARI_CLASSES["AVERAGE"]:
+                                elif "AVERAGE" in self.ARI_CLASSES and cur_pred_ari_class == self.ARI_CLASSES["AVERAGE"]:
                                     temp_ans.append(np.mean(roud_selected_numbers))
                                     current_ops[roud] = "Average"
                                 else:
@@ -810,13 +813,13 @@ class TagopModel(nn.Module):
                                         current_ops[roud] = "Stop"
                                         break
                                     else:
-                                        if "DIFF" in self.ARI_CLASSES and pred_ari_class[bsz,roud] == self.ARI_CLASSES["DIFF"]:
+                                        if "DIFF" in self.ARI_CLASSES and cur_pred_ari_class == self.ARI_CLASSES["DIFF"]:
                                             if is_opt == True or int(pred_order[bsz,roud]) == 0:
                                                 temp_ans.append(operand_one - operand_two)
                                             else:
                                                 temp_ans.append(operand_two - operand_one)
                                             current_ops[roud] = "Difference"
-                                        elif "DIVIDE" in self.ARI_CLASSES and pred_ari_class[bsz,roud] == self.ARI_CLASSES["DIVIDE"]:
+                                        elif "DIVIDE" in self.ARI_CLASSES and cur_pred_ari_class == self.ARI_CLASSES["DIVIDE"]:
                                             if is_opt == True or int(pred_order[bsz,roud]) == 0:
                                                 if operand_two == 0:
                                                     answer  =temp_ans[-1]
