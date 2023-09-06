@@ -175,7 +175,7 @@ class TagopModel(nn.Module):
         # NLLLoss for tag_prediction
         self.NLLLoss = nn.NLLLoss(reduction='none')
 
-        self.ari_criterion = nn.CrossEntropyLoss(reduction='sum')
+        self.ari_criterion = nn.CrossEntropyLoss()
         self.operand_criterion = nn.CrossEntropyLoss(reduction='sum')
         self.opt_criterion = nn.CrossEntropyLoss(reduction='sum')
         self.order_criterion = nn.CrossEntropyLoss(reduction='sum')
