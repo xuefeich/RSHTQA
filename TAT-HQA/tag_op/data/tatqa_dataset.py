@@ -927,13 +927,14 @@ class TagTaTQAReader(object):
                    ari_ops = [self.ari_ops['AVERAGE']]
                    ari_tags = {'table':[table_tags],'para':[paragraph_tags],'operation':[[0]*self.num_ops]}
                    isavg = 1
+                   rounds_labels = 0
             except:
                 isavg = 0
             if isavg == 0:
                dvt_split_suc = 0
                try:
                     ari_operations = infix_evaluator(original_derivation)
-                    rounds_labels = len(ari_operations)
+                    rounds_labels = len(ari_operations) - 1
                     dvt_split_suc = 1
                     if rounds_labels > self.num_ops:
                         operator_class = None
