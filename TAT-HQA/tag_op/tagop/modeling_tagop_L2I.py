@@ -142,7 +142,8 @@ class TagopModel(nn.Module):
         # operator predictor
         self.operator_predictor = FFNLayer(hidden_size, hidden_size, operator_classes, dropout_prob)
         # scale predictor
-        self.scale_predictor = FFNLayer(3 * hidden_size, hidden_size, scale_classes, dropout_prob)
+        self.scale_predictor = FFNLayer(2 * hidden_size, hidden_size, scale_classes, dropout_prob)
+        self.rounds_predictor = FFNLayer(3 * hidden_size, hidden_size, scale_classes, dropout_prob)
         # tag predictor
         self.tag_predictor = FFNLayer(hidden_size, hidden_size, 2, dropout_prob)
         # if tag predictor
@@ -215,7 +216,7 @@ class TagopModel(nn.Module):
                 question_if_part_attention_mask: torch.LongTensor, # [cls, 0, if, sep, 0, sep, 0]
                 paragraph_mask: torch.LongTensor, # [cls, q, if, sep, 0, sep, p]
                 table_mask: torch.LongTensor, # [cls, 0, 0, sep, t, sep, 0]
-
+                question_mask: torch.LongTensor,
                 token_type_ids: torch.LongTensor,
 
                 if_tag_labels: torch.LongTensor,
@@ -278,8 +279,14 @@ class TagopModel(nn.Module):
         table_sequence_output = util.replace_masked_values(outputs[0], table_mask.unsqueeze(-1), 0)
         paragraph_reduce_mean = torch.mean(paragraph_sequence_output, dim=1)
         table_reduce_mean = torch.mean(table_sequence_output, dim=1)
-        scale_output = torch.cat((cls_output, table_reduce_mean, paragraph_reduce_mean), dim=-1)
+
+        question_sequence_output = util.replace_masked_values(outputs[0], question_mask.unsqueeze(-1), 0)
+        question_reduce_mean = torch.mean(question_sequence_output, dim=1)
+        
+        rounds_output = torch.cat((cls_output, table_reduce_mean, paragraph_reduce_mean), dim=-1)
+        scale_output = torch.cat((cls_output, question_reduce_mean), dim=-1)
         scale_prediction = self.scale_predictor(scale_output)
+        rounds_prediction = self.rounds_predictor(rounds_output)
         
         if self.share_param:
             for _ in range(self.cross_attn_layer):
@@ -387,6 +394,7 @@ class TagopModel(nn.Module):
                 question_if_part_attention_mask,
                 paragraph_mask,
                 table_mask,
+                question_mask: torch.LongTensor,
                 token_type_ids: torch.LongTensor,
 
                 paragraph_index: torch.LongTensor,
