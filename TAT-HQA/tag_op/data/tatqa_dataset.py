@@ -916,7 +916,7 @@ class TagTaTQAReader(object):
                 paragraph_number_value, paragraph_index, _= paragraph_tokenize(question_text, paragraphs, self.tokenizer, original_answer_mapping, if_mapping)
                          
         order_labels = np.zeros(self.num_ops)
-
+        rounds_labels = -100
         if answer_type == "arithmetic":
             counter_operator_class = self.OPERATOR_CLASSES["ARITHMETIC"]
             num_facts = facts_to_nums(counter_facts)
@@ -933,8 +933,9 @@ class TagTaTQAReader(object):
                dvt_split_suc = 0
                try:
                     ari_operations = infix_evaluator(original_derivation)
+                    rounds_labels = len(ari_operations)
                     dvt_split_suc = 1
-                    if len(ari_operations) > self.num_ops:
+                    if rounds_labels > self.num_ops:
                         operator_class = None
                         dvt_split_suc = 0
                except:
@@ -1175,6 +1176,7 @@ class TagTaTQAReader(object):
         "tag_labels": np.array(tags), 
         "if_tag_labels": np.array(if_tags), 
         "operator_labels": int(counter_operator_class), 
+        "rounds_labels" : int(rounds_labels),
         "if_operator_labels": int(if_operator_class), 
         "scale_labels": int(counter_scale_class),
         "answer_dict": answer_dict, 
