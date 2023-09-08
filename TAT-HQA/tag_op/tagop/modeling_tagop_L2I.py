@@ -143,7 +143,7 @@ class TagopModel(nn.Module):
         self.operator_predictor = FFNLayer(hidden_size, hidden_size, operator_classes, dropout_prob)
         # scale predictor
         self.scale_predictor = FFNLayer(2 * hidden_size, hidden_size, scale_classes, dropout_prob)
-        self.rounds_predictor = FFNLayer(3 * hidden_size, hidden_size, scale_classes, dropout_prob)
+        self.rounds_predictor = FFNLayer(3 * hidden_size, hidden_size, num_ops, dropout_prob)
         # tag predictor
         self.tag_predictor = FFNLayer(hidden_size, hidden_size, 2, dropout_prob)
         # if tag predictor
@@ -180,6 +180,7 @@ class TagopModel(nn.Module):
         self.operand_criterion = nn.CrossEntropyLoss(reduction='sum')
         self.opt_criterion = nn.CrossEntropyLoss(reduction='sum')
         self.order_criterion = nn.CrossEntropyLoss(reduction='sum')
+        self.rounds_criterion = nn.CrossEntropyLoss(reduction='sum')
         
 
         self.config = config
@@ -229,6 +230,7 @@ class TagopModel(nn.Module):
                 if_operator_labels: torch.LongTensor,
                 scale_labels: torch.LongTensor,
                 order_labels: torch.LongTensor,
+                rounds_labels: torch.LongTensor,
                 
                 counter_arithmetic_mask: torch.LongTensor, # the input tensor is not used here, re-calculated later
                 original_mask: torch.LongTensor, # the input is tensor not used here, re-calculated later
@@ -334,6 +336,8 @@ class TagopModel(nn.Module):
 
         opt_output = torch.zeros([batch_size,self.num_ops,self.hidden_size],device = device)
         for bsz in range(batch_size):
+            if rounds_labels[bsz] != -100:
+                output_dict["loss"] = output_dict["loss"] + self.rounds_criterion(rounds_prediction[bsz].unsqueeze(0) , rounds_labels[bsz].unsqueeze(0))
             opt_output[bsz] = concatenated_qtp_if[bsz,opt_mask[bsz]:opt_mask[bsz]+self.num_ops,:]
             for roud in range(self.num_ops):
                if ari_ops[bsz,roud] != -100:
@@ -442,9 +446,16 @@ class TagopModel(nn.Module):
         table_sequence_output = util.replace_masked_values(outputs[0], table_mask.unsqueeze(-1), 0)
         paragraph_reduce_mean = torch.mean(paragraph_sequence_output, dim=1)
         table_reduce_mean = torch.mean(table_sequence_output, dim=1)
-        scale_output = torch.cat((cls_output, table_reduce_mean, paragraph_reduce_mean), dim=-1)
 
+        question_sequence_output = util.replace_masked_values(outputs[0], question_mask.unsqueeze(-1), 0)
+        question_reduce_mean = torch.mean(question_sequence_output, dim=1)
+        
+        rounds_output = torch.cat((cls_output, table_reduce_mean, paragraph_reduce_mean), dim=-1)
+        scale_output = torch.cat((cls_output, question_reduce_mean), dim=-1)
         scale_prediction = self.scale_predictor(scale_output)
+        rounds_prediction = self.rounds_predictor(rounds_output)
+
+        pred_rounds = torch.argmax(rounds_prediction, dim=-1)
         
         if self.share_param:
             for _ in range(self.cross_attn_layer):
@@ -464,8 +475,8 @@ class TagopModel(nn.Module):
         for bsz in range(batch_size):
             opt_output[bsz] = concatenated_qtp_if[bsz,opt_mask[bsz]:opt_mask[bsz]+self.num_ops,:]
         ari_ops_prediction = self.ari_predictor(opt_output)
-        pred_ari_class = torch.argmax(ari_ops_prediction,dim = -1)
-        pred_ari_class_fst = torch.argmax(ari_ops_prediction[:,:,1:],dim = -1)
+        #pred_ari_class = torch.argmax(ari_ops_prediction,dim = -1)
+        pred_ari_class = torch.argmax(ari_ops_prediction[:,:,1:],dim = -1)
                     
         total_if_tag_prediction = self.if_tag_predictor(concatenated_qtp_if)
         total_if_tag_prediction = util.replace_masked_values(total_if_tag_prediction, total_attention_mask.unsqueeze(-1), 0)
@@ -725,18 +736,21 @@ class TagopModel(nn.Module):
                     else:
                         selected_numbers_labels = [pred_ari_tags_class[i] for i in range(num_numbers) if number_indexes_batch[i,0] == bsz]
                         temp_ans = []
-                        for roud in range(self.num_ops):
-                            cur_pred_ari_class = pred_ari_class[bsz,roud]
-                            if "STP" in self.ARI_CLASSES and pred_ari_class[bsz,roud] == self.ARI_CLASSES["STP"]:
-                                if roud == 0:
-                                    #answer = ""
-                                    #print("stop at first round")
-                                    #current_ops[roud] = "Stop"
-                                    cur_pred_ari_class = pred_ari_class_fst[bsz,roud]+1
-                                else:
-                                    answer = temp_ans[-1]
-                                    current_ops[roud] = "Stop"
-                                    break
+
+                        cur_rounds = int(pred_rounds[bsz]) + 1
+                        
+                        for roud in range(cur_rounds):
+                            cur_pred_ari_class = pred_ari_class[bsz,roud] + 1
+                            # if "STP" in self.ARI_CLASSES and pred_ari_class[bsz,roud] == self.ARI_CLASSES["STP"]:
+                            #     if roud == 0:
+                            #         #answer = ""
+                            #         #print("stop at first round")
+                            #         #current_ops[roud] = "Stop"
+                            #         cur_pred_ari_class = pred_ari_class_fst[bsz,roud]+1
+                            #     else:
+                            #         answer = temp_ans[-1]
+                            #         current_ops[roud] = "Stop"
+                            #         break
                             roud_selected_numbers = [selected_numbers[i] for i in range(len(selected_numbers)) if selected_numbers_labels[i][roud] != 0]
                             for rnum in roud_selected_numbers:
                                 if rnum not in pred_operands:
@@ -841,7 +855,7 @@ class TagopModel(nn.Module):
                                                     break
                                                 temp_ans.append(operand_two / operand_one)
                                             current_ops[roud] = "Division"
-                                if roud == self.num_ops - 1:
+                                if roud == cur_rounds - 1:
                                     answer = np.round(temp_ans[-1],4)
 
                 if answer != "":
