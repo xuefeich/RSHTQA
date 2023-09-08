@@ -610,6 +610,9 @@ def _concat(question_and_if_ids,
     table_index = torch.zeros_like(input_ids)
     tags = torch.zeros_like(input_ids)
     if_tags = torch.zeros_like(input_ids)
+
+    question_mask = torch.zeros_like(input_ids)
+    
     question_if_part_attention_mask = torch.zeros_like(input_ids)
 
     opt_mask = torch.zeros_like(input_ids)
@@ -628,6 +631,7 @@ def _concat(question_and_if_ids,
     question_if_part_attention_mask[0, :len(question_if_part_indicator)] = torch.from_numpy(np.array(question_if_part_indicator))
     
     question_length = len(question_ids)
+    question_mask[0,1:question_length-1] = 1
     table_length = len(table_ids)
     paragraph_length = len(paragraph_ids)
     if passage_length_limitation is not None:
@@ -716,7 +720,7 @@ def _concat(question_and_if_ids,
                 ari_round_labels[0,i, question_length + table_length + 1:question_length + table_length + paragraph_length+1] = torch.from_numpy(np.array(ari_para_tags[i][:paragraph_length]))
     
     return input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-           table_mask, table_cell_number_value, table_index, tags, if_tags, input_segments,opt_mask,ari_round_labels
+           table_mask, table_cell_number_value, table_index, tags, if_tags, input_segments,opt_mask,ari_round_labels,question_mask
 
 def _test_concat(question_and_if_ids,
             question_and_if_index,
@@ -748,6 +752,8 @@ def _test_concat(question_and_if_ids,
     question_if_part_attention_mask = torch.zeros_like(input_ids)
     opt_mask = torch.zeros_like(input_ids)
 
+    question_mask = torch.zeros_like(input_ids)
+
     truncated_question = False
     if question_length_limitation is not None:
         if len(question_and_if_ids) > question_length_limitation:
@@ -761,6 +767,7 @@ def _test_concat(question_and_if_ids,
     question_if_part_attention_mask[0, :len(question_if_part_indicator)] = torch.from_numpy(np.array(question_if_part_indicator))
     
     question_length = len(question_ids)
+    question_mask[0,1:question_length-1] = 1
     table_length = len(table_ids)
     paragraph_length = len(paragraph_ids)
     if passage_length_limitation is not None:
@@ -814,7 +821,7 @@ def _test_concat(question_and_if_ids,
     paragraph_tokens = question_and_if_tokens[:max_question_index] + paragraph_tokens
     
     return input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-           table_mask, table_cell_number_value, table_index, input_segments,opt_mask
+           table_mask, table_cell_number_value, table_index, input_segments,opt_mask,question_mask
 
 
 
@@ -1022,7 +1029,7 @@ class TagTaTQAReader(object):
                          "opt":self.opt,"num_ops":self.num_ops,"ari_tags":ari_tags}
         
         input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-        table_mask, table_cell_number_value, table_cell_index, tags, if_tags, input_segments, opt_mask,ari_round_labels = _concat(**concat_params)
+        table_mask, table_cell_number_value, table_cell_index, tags, if_tags, input_segments, opt_mask,ari_round_labels,question_mask = _concat(**concat_params)
 
         opt_labels = torch.zeros(1,self.num_ops - 1 , self.num_ops-1)
         if answer_type == "arithmetic":
@@ -1180,6 +1187,7 @@ class TagTaTQAReader(object):
         "ari_labels" : torch.LongTensor(np.array(ari_sel_labels)),
         "selected_indexes" : np.array(number_indexes),
         "opt_labels": torch.LongTensor(np.array(opt_labels)),
+        "question_mask" : np.array(question_mask)
         }
         
         return make_instance
@@ -1451,7 +1459,7 @@ class TagTaTQATestReader(object):
                          "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces,"opt":self.opt,"num_ops":self.num_ops}
 
         input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-        table_mask, table_cell_number_value, table_cell_index, input_segments,opt_mask = _test_concat(**concat_params)
+        table_mask, table_cell_number_value, table_cell_index, input_segments,opt_mask,question_mask = _test_concat(**concat_params)
 
         opt_id = torch.nonzero(opt_mask == 1)[0,1]
 
@@ -1483,7 +1491,8 @@ class TagTaTQATestReader(object):
             "table_cell_tokens": table_cell_tokens,
             "answer_dict": answer_dict, 
             "question_id": question_id,
-            "opt_mask":opt_id
+            "opt_mask":opt_id,
+            "question_mask" : np.array(question_mask)
             }
         
         return make_instance
