@@ -1085,6 +1085,7 @@ class TagTaTQAReader(object):
             if ari_ops[1] == 0:
                 opt_labels[0,:,:] = -100
         else:
+            print(ari_ops)
             for i in range(1,self.num_ops-1):
                 for j in range(i):
                     opt_labels[0,i,j] = -100
@@ -1159,8 +1160,8 @@ class TagTaTQAReader(object):
                     order_labels[i] = -100
 
         opt_id = torch.nonzero(opt_mask == 1)[0,1]
-        
-        
+
+        ari_ops = ari_ops[:self.num_ops]
         make_instance = {
         "input_ids": np.array(input_ids), 
         "qtp_attention_mask":  np.array(qtp_attention_mask),
