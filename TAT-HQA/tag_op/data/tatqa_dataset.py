@@ -936,7 +936,7 @@ class TagTaTQAReader(object):
                     ari_operations = infix_evaluator(original_derivation)
                     rounds_labels = len(ari_operations) - 1
                     dvt_split_suc = 1
-                    if rounds_labels > self.num_ops:
+                    if rounds_labels > self.num_ops - 1:
                         operator_class = None
                         dvt_split_suc = 0
                except:
