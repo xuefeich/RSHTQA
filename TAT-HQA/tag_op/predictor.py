@@ -9,7 +9,7 @@ import torch.nn as nn
 from pprint import pprint
 from tools.utils import create_logger, set_environment
 from data.tatqa_batch_gen import TaTQATestBatchGen
-from data.data_util import OPERATOR_CLASSES_, IF_OPERATOR_CLASSES_
+from data.data_util import OPERATOR_CLASSES_, IF_OPERATOR_CLASSES_,ARI_CLASSES
 from data.data_util import get_op_1, get_op_2, get_arithmetic_op_index_1, get_arithmetic_op_index_2
 from data.data_util import get_op_3, get_arithmetic_op_index_3
 from transformers import RobertaModel, BertModel
