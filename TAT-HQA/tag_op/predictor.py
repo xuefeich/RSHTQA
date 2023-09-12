@@ -61,8 +61,9 @@ def main():
     elif args.encoder == 'finbert':
         bert_model = BertModel.from_pretrained(args.finbert_model)
 
+    bert_model.resize_token_embeddings(bert_model.config.vocab_size+1)
     if args.ablation_mode == 0:
-        operators = [1 for _ in range(10)]
+        operators = [1 for _ in range(5)]
         arithmetic_op_index = [3, 4, 6, 7, 8, 9]
     elif args.ablation_mode == 1:
         operators = get_op_1(args.op_mode)
