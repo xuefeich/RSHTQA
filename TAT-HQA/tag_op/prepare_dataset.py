@@ -35,6 +35,9 @@ elif args.encoder == 'finbert':
 if args.mode == 'dev':
     data_reader = TagTaTQATestReader(tokenizer, args.passage_length_limit, args.question_length_limit, sep=sep)
     data_mode = ["dev"]
+elif args.mode == 'test':
+    data_reader = TagTaTQATestReader(tokenizer, args.passage_length_limit, args.question_length_limit, sep=sep)
+    data_mode = ["test"]
 else:
     data_reader = TagTaTQAReader(tokenizer, args.passage_length_limit, args.question_length_limit, sep=sep)
     data_mode = ["train"]
