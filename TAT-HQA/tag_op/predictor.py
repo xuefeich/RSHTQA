@@ -84,7 +84,7 @@ def main():
     network = TagopModel(
         bert = bert_model,
         config = bert_model.config,
-        bsz = args.batch_size,
+        bsz = 32,
         operator_classes = len(operators),
         if_operator_classes = len(if_operators),
         ari_classes = len(ARI_CLASSES_),
