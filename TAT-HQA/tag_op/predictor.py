@@ -33,6 +33,7 @@ parser.add_argument("--cross_attn_layer", type=int, default=0) # depth of matchi
 parser.add_argument("--ca_with_self", type=int, default=1) # 0 or 1, apply self MHA in matching block?
 parser.add_argument("--share_param", type=int, default=1) # 0 or 1, enable parameter sharing in matching block?
 parser.add_argument("--result_save_file_name", type=str, default='answer.json') # result file name
+parser.add_argument("--num_ops", type=int, default=6)
 
 
 args = parser.parse_args()
@@ -52,7 +53,7 @@ pprint(args)
 set_environment(args.cuda)
 
 def main():
-    dev_itr = TaTQATestBatchGen(args, data_mode="dev", encoder=args.encoder)
+    dev_itr = TaTQATestBatchGen(args, data_mode="test",  num_ops = args.num_ops, encoder=args.encoder)
     if args.encoder == 'roberta':
         bert_model = RobertaModel.from_pretrained(args.roberta_model)
     elif args.encoder == 'bert':
@@ -81,19 +82,20 @@ def main():
         if_operators = IF_OPERATOR_CLASSES_
 
     network = TagopModel(
-        bert=bert_model,
-        config=bert_model.config,
-        bsz=None,
-        operator_classes=len(operators),
+        bert = bert_model,
+        config = bert_model.config,
+        bsz = args.batch_size,
+        operator_classes = len(operators),
         if_operator_classes = len(if_operators),
+        ari_classes = len(ARI_CLASSES_),
+        num_ops = args.num_ops,
         scale_classes = 5,
-        num_head = 8,
-        cross_attn_layer=args.cross_attn_layer,
+        num_head = 8, # MHA head number
+        cross_attn_layer = args.cross_attn_layer,
         ca_with_self=args.ca_with_self,
         share_param=args.share_param,
-        #operator_criterion=nn.CrossEntropyLoss(),
-        #scale_criterion=nn.CrossEntropyLoss(),
-        arithmetic_op_index = arithmetic_op_index,
+        #operator_criterion = nn.CrossEntropyLoss(),
+        #scale_criterion = nn.CrossEntropyLoss(),
         op_mode = args.op_mode,
         ablation_mode = args.ablation_mode,
     )
@@ -107,7 +109,7 @@ def main():
     model.avg_reset()
     pred_answer = model.predict(dev_itr)
     pred_answer = answer_format(pred_answer)
-    answer_file = os.path.join(args.save_dir, args.result_save_file_name.replace('.json', '_dev.json'))
+    answer_file = os.path.join(args.save_dir, args.result_save_file_name.replace('.json', '_test.json'))
     print('Writing dev answer to', answer_file)
     with open(answer_file, 'w') as f:
         json.dump(pred_answer, f)
