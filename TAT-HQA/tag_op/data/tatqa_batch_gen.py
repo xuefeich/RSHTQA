@@ -296,7 +296,7 @@ class TaTQATestBatchGen(object):
                 question_ids.append(question_ids_batch[i])
                 opt_mask[i] = opt_mask_batch[i]
 
-                question_mask = torch.from_numpy(item["question_mask"])
+                question_mask = question_mask_batch[i]
                 
                 
             out_batch = {"input_ids": input_ids, "qtp_attention_mask":qtp_attention_mask,
