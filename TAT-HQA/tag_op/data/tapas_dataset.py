@@ -780,16 +780,16 @@ def _test_concat(question_and_if_ids,
             table_length = passage_length_limitation
             paragraph_length = 0
         elif len(table_ids) + len(paragraph_ids) + 1> passage_length_limitation:
-            passage_ids = table_ids + [sep] + paragraph_ids
-            passage_ids = passage_ids[:passage_length_limitation]
             table_length = len(table_ids)
             paragraph_length = passage_length_limitation - table_length - 1
+            paragraph_ids = paragraph_ids[:paragraph_length]
+            passage_ids = paragraph_ids + [sep] + table_ids
         else:
-            passage_ids = table_ids + [sep] + paragraph_ids
+            passage_ids = paragraph_ids + [sep] + table_ids
             table_length = len(table_ids)
             paragraph_length = len(paragraph_ids)
     else:
-        passage_ids = table_ids + [sep] + paragraph_ids
+        passage_ids = paragraph_ids + [sep] + table_ids
 
     passage_length = len(passage_ids)
     passage_ids = passage_ids + [sep]+ num_ops * [opt] + [sep]
@@ -800,13 +800,6 @@ def _test_concat(question_and_if_ids,
     qtp_attention_mask = qtp_attention_mask.int()
     qtp_attention_mask = (1 - question_if_part_attention_mask) * qtp_attention_mask
     assert (qtp_attention_mask == -1).any() == False
-    
-    table_mask[0, question_length:question_length + table_length] = 1
-    table_index[0, question_length:question_length + table_length] = \
-        torch.from_numpy(np.array(in_table_cell_index[:table_length]))
-
-    paragraph_mask[0, 1: question_length - 1] = 1
-    paragraph_mask[0, question_length + table_length + 1:question_length + table_length + 1 + paragraph_length] = 1
 
     opt_mask[0,passage_length +1  : passage_length + num_ops + 1 ] = 1
     
@@ -814,11 +807,16 @@ def _test_concat(question_and_if_ids,
     if truncated_question == False:
         assert max_question_index == question_and_if_index[-1]
         assert len(question_and_if_number_value) == max_question_index
-    
+
+    paragraph_mask[0, 1: question_length - 1] = 1
+    paragraph_mask[0, question_length:question_length + paragraph_length] = 1
     paragraph_index[0, 1:question_length - 1] = torch.from_numpy(np.array(question_and_if_index[:question_length - 2]))
-    
-    paragraph_index[0, question_length + table_length + 1: question_length + table_length + 1 + paragraph_length] = \
-        torch.from_numpy(np.array(in_paragraph_index[:paragraph_length]) + max_question_index)
+    paragraph_index[0, question_length:question_length + paragraph_length] = \
+        torch.from_numpy(np.array(in_paragraph_index[:paragraph_length])+ max_question_index)
+
+    table_mask[0, question_length+ paragraph_length +1 :question_length + paragraph_length + 1 + table_length] = 1
+    table_index[0, question_length+ paragraph_length + 1 :question_length + paragraph_length + 1 + table_length] = \
+        torch.from_numpy(np.array(in_table_cell_index[:table_length]))
     
     # truncate these
     paragraph_number_value  = question_and_if_number_value[:max_question_index] + paragraph_number_value
@@ -963,7 +961,7 @@ class TagTaTQAReader(object):
                                   elif operand_one_mapping["table"][0][1] > operand_two_mapping["table"][0][1]:
                                       order_labels[i] = 1
                               elif "paragraph" in operand_one_mapping and "table" in operand_two_mapping:
-                                  order_labels[i] = 1
+                                  order_labels[i] = 0
                               elif "paragraph" in operand_one_mapping and "paragraph" in operand_two_mapping:
                                   opd1_pid = list(operand_one_mapping["paragraph"].keys())[0]
                                   opd2_pid = list(operand_two_mapping["paragraph"].keys())[0]
@@ -1372,15 +1370,15 @@ class TagTaTQATestReader(object):
                                 for o in range(tl+pl):
                                     if isinstance(ari[1],str) or isinstance(ari[2],str):
                                         break
-                                    if o < tl:
-                                        if tv[o] == ari[1]:
+                                    if o < pl:
+                                        if pv[o] == ari[1]:
                                             opd1 = o
-                                        if tv[o] == ari[2]:
+                                        if pv[o] == ari[2]:
                                             opd2 = o
                                     else:
-                                        if pv[o-tl] == ari[1]:
+                                        if tv[o-pl] == ari[1]:
                                             opd1 = o
-                                        if pv[o-tl] == ari[2]:
+                                        if tv[o-pl] == ari[2]:
                                             opd2 = o
                                 if opd1 == -100 or opd2 == -100:
                                     print("order fail")
@@ -1401,15 +1399,15 @@ class TagTaTQATestReader(object):
                                 for o in range(tl+pl):
                                     if isinstance(ari[1],str) or isinstance(ari[2],str):
                                         break
-                                    if o < tl:
-                                        if tv[o] == ari[1]:
+                                    if o < pl:
+                                        if pv[o] == ari[1]:
                                             opd1 = o
-                                        if tv[o] == ari[2]:
+                                        if pv[o] == ari[2]:
                                             opd2 = o
                                     else:
-                                        if pv[o-tl] == ari[1]:
+                                        if tv[o-pl] == ari[1]:
                                             opd1 = o
-                                        if pv[o-tl] == ari[2]:
+                                        if tv[o-pl] == ari[2]:
                                             opd2 = o
                                 if opd1 == -100 or opd2 == -100:
                                     print("order fail")
