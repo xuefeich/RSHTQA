@@ -192,7 +192,7 @@ def string_tokenizer(string: str, tokenizer) -> List[int]:
     return ids
 
 
-def table_tokenize(table, tokenizer, mapping, if_mapping):
+def table_tokenize(table, tokenizer, mapping, if_mapping,question_numbers = []):
     mapping_content = []
     table_cell_tokens = []
     table_ids = []
@@ -211,17 +211,63 @@ def table_tokenize(table, tokenizer, mapping, if_mapping):
         if_answer_coordinates = if_mapping["table"]
         
     current_cell_index = 1
-    for i in range(len(table)):
-        for j in range(len(table[i])):
+
+    current_cell_index = 1
+
+    colnum = len(table)
+    rownum = len(table[0])
+
+    token_type_ids = []
+
+    table_number_mat = np.zeros([colnum,rownum])
+    table_number_mat_sorted = np.zeros([colnum,rownum - 1])
+    getnan = [False] * colnum
+
+    for i in range(colnum):
+        for j in range(rownum):
+            if is_number(table[i][j]):
+                table_number_mat[i,j] = to_number(table[i][j])
+            else:
+                if j > 0 :
+                   getnan[i] = True
+                table_number_mat[i,j] = np.nan
+        if not getnan[i]:
+            col_number_sorted = table_number_mat[i][1:].copy()
+            col_number_sorted.sort(axis = 0)
+            table_number_mat_sorted[i] = col_number_sorted
+
+    
+    for j in range(rownum):
+        for i in range(colnum):
             cell_ids = string_tokenizer(table[i][j], tokenizer)
             if not cell_ids:
                 continue
             table_ids += cell_ids
-            if is_number(table[i][j]):
-                table_cell_number_value.append(to_number(table[i][j]))
-            else:
-                table_cell_number_value.append(np.nan)
+            col_id = i + 1
+            row_id = j
+            relation_set_index = 0
+            table_cell_number_value.append(table_number_mat[i,j])
             table_cell_tokens.append(table[i][j])
+            if j > 0:
+                if not getnan[i]:
+                    rank_base = int(np.nonzero(table_number_mat_sorted[i] == table_number_mat[i,j])[0][0])
+                    num_rank = rank_base + 1
+                    inv_rank = rownum - 1 - rank_base
+                    # for value in question_numbers:
+                    #     relation_value = get_numeric_relation(value,table_number_mat[i,j])
+                    #     assert relation_value >= Relation.EQ
+                    #     relation_set_index += 2 ** (relation_value - Relation.EQ)
+                    if len(question_numbers) > 0:
+                        relation_set_index = 2
+                else:
+                    num_rank = 0
+                    inv_rank = 0
+            else:
+                num_rank = 0
+                inv_rank = 0
+            for _ in range(len(cell_ids[0])):
+               token_type_ids.append([1,col_id,row_id,0,num_rank,inv_rank,relation_set_index]) 
+            
             if table_mapping:
                 if [i, j] in answer_coordinates or (i, j) in answer_coordinates:
                     mapping_content.append(table[i][j])
@@ -239,7 +285,7 @@ def table_tokenize(table, tokenizer, mapping, if_mapping):
                 table_if_tags += [0 for _ in range(len(cell_ids))]
             table_cell_index += [current_cell_index for _ in range(len(cell_ids))]
             current_cell_index += 1
-    return table_cell_tokens, table_ids, table_tags, table_if_tags, table_cell_number_value, table_cell_index, mapping_content
+    return table_cell_tokens, table_ids, table_tags, table_if_tags, table_cell_number_value, table_cell_index, mapping_content,token_type_ids
 
 def org_table_tokenize(table, tokenizer, mapping):
     table_tags = []
@@ -592,18 +638,20 @@ def _concat(question_and_if_ids,
             table_if_tags,
             table_cell_index,
             table_cell_number_value,
+            cls,
             sep,
             question_length_limitation,
             passage_length_limitation,
             max_pieces,
             opt,
             num_ops,
-            ari_tags):
+            ari_tags,
+            table_type_ids):
     in_table_cell_index = table_cell_index.copy()
     in_paragraph_index = paragraph_index.copy()
     
     input_ids = torch.zeros([1, max_pieces])
-    input_segments = torch.zeros_like(input_ids)
+    token_type_ids = torch.zeros([1, max_pieces,7])
     paragraph_mask = torch.zeros_like(input_ids)
     paragraph_index = torch.zeros_like(input_ids)
     table_mask = torch.zeros_like(input_ids)
@@ -626,7 +674,7 @@ def _concat(question_and_if_ids,
             question_and_if_index = question_and_if_index[:question_length_limitation]
             truncated_question = True
     
-    question_ids = [sep] + question_and_if_ids + [sep]
+    question_ids = [cls] + question_and_if_ids + [sep]
     question_if_part_indicator = [0] + question_if_part_indicator
     question_if_part_attention_mask[0, :len(question_if_part_indicator)] = torch.from_numpy(np.array(question_if_part_indicator))
     
@@ -693,7 +741,7 @@ def _concat(question_and_if_ids,
     
     tags[0, 1: question_length -1] = torch.from_numpy(np.array(question_and_if_tags[:question_length - 2]))
     if_tags[0, 1: question_length -1] = torch.from_numpy(np.array(question_and_if_if_tags[:question_length - 2]))
-    
+    token_type_ids[0, question_length+ paragraph_length +1 :question_length + table_length + paragraph_length +1] = torch.from_numpy(np.array(table_type_ids[:table_length]))
     
     # truncate these
     paragraph_number_value  = question_and_if_number_value[:max_question_index] + paragraph_number_value
@@ -724,7 +772,7 @@ def _concat(question_and_if_ids,
                 ari_round_labels[0,i, question_length:question_length + paragraph_length] = torch.from_numpy(np.array(ari_para_tags[i][:paragraph_length]))
     
     return input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-           table_mask, table_cell_number_value, table_index, tags, if_tags, input_segments,opt_mask,ari_round_labels,question_mask
+           table_mask, table_cell_number_value, table_index, tags, if_tags, token_type_ids,opt_mask,ari_round_labels,question_mask
 
 def _test_concat(question_and_if_ids,
             question_and_if_index,
@@ -738,17 +786,19 @@ def _test_concat(question_and_if_ids,
             table_ids,
             table_cell_index,
             table_cell_number_value,
+            cls,
             sep,
             question_length_limitation,
             passage_length_limitation,
             max_pieces,
             opt,
-            num_ops):
+            num_ops,
+            table_type_ids):
     in_table_cell_index = table_cell_index.copy()
     in_paragraph_index = paragraph_index.copy()
     
     input_ids = torch.zeros([1, max_pieces])
-    input_segments = torch.zeros_like(input_ids)
+    token_type_ids = torch.zeros([1, max_pieces,7])
     paragraph_mask = torch.zeros_like(input_ids)
     paragraph_index = torch.zeros_like(input_ids)
     table_mask = torch.zeros_like(input_ids)
@@ -766,7 +816,7 @@ def _test_concat(question_and_if_ids,
             question_and_if_index = question_and_if_index[:question_length_limitation]
             truncated_question = True
     
-    question_ids = [sep] + question_and_if_ids + [sep]
+    question_ids = [cls] + question_and_if_ids + [sep]
     question_if_part_indicator = [0] + question_if_part_indicator
     question_if_part_attention_mask[0, :len(question_if_part_indicator)] = torch.from_numpy(np.array(question_if_part_indicator))
     
@@ -821,9 +871,11 @@ def _test_concat(question_and_if_ids,
     # truncate these
     paragraph_number_value  = question_and_if_number_value[:max_question_index] + paragraph_number_value
     paragraph_tokens = question_and_if_tokens[:max_question_index] + paragraph_tokens
+
+    token_type_ids[0, question_length+ paragraph_length +1 :question_length + table_length + paragraph_length +1] = torch.from_numpy(np.array(table_type_ids[:table_length]))
     
     return input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
-           table_mask, table_cell_number_value, table_index, input_segments,opt_mask,question_mask
+           table_mask, table_cell_number_value, table_index, input_segments,opt_mask,question_mask,token_type_ids
 
 
 
