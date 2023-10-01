@@ -31,7 +31,7 @@ elif args.encoder == 'bert':
 elif args.encoder == 'tapas':
     from transformers import TapasTokenizer
     from tag_op.data.tapas_dataset import TagTaTQAReader, TagTaTQATestReader
-    tokenizer = TapasTokenizer.from_pretrained(args.model_path + "/tapas.large")
+    tokenizer = TapasTokenizer.from_pretrained(args.tapas_path + "/tapas.large")
     tokenizer.add_special_tokens({'additional_special_tokens':['[OPT]']})
     sep = '[SEP]'
 
