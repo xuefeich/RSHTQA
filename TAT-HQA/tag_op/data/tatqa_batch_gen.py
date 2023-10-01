@@ -99,7 +99,8 @@ class TaTQABatchGen(object):
             input_ids = torch.LongTensor(bsz, 512)
             qtp_attention_mask = torch.LongTensor(bsz, 512)
             question_if_part_attention_mask = torch.LongTensor(bsz, 512)
-            token_type_ids = torch.LongTensor(bsz, 512).fill_(0)
+            #token_type_ids = torch.LongTensor(bsz, 512).fill_(0)
+            token_type_ids = torch.LongTensor(bsz, 512,7)
             paragraph_mask = torch.LongTensor(bsz, 512)
             paragraph_numbers = []
             paragraph_index = torch.LongTensor(bsz, 512)
@@ -264,7 +265,8 @@ class TaTQATestBatchGen(object):
             input_ids = torch.LongTensor(bsz, 512)
             qtp_attention_mask = torch.LongTensor(bsz, 512)
             question_if_part_attention_mask = torch.LongTensor(bsz, 512)
-            token_type_ids = torch.LongTensor(bsz, 512).fill_(0)
+            #token_type_ids = torch.LongTensor(bsz, 512).fill_(0)
+            token_type_ids = torch.LongTensor(bsz, 512,7)
             paragraph_mask = torch.LongTensor(bsz, 512)
             paragraph_numbers = []
             paragraph_index = torch.LongTensor(bsz, 512)
