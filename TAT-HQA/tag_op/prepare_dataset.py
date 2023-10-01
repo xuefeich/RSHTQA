@@ -16,6 +16,7 @@ parser.add_argument("--mode", type=str, default='train')
 parser.add_argument("--roberta_model", type=str, default='')
 parser.add_argument("--data_format", type=str, default="tatqa_and_hqa_field_{}.json")
 parser.add_argument("--num_arithmetic_operators",type=int,default=6)
+parser.add_argument("--tapas_path", type=str, default='')
 
 args = parser.parse_args()
 
@@ -27,8 +28,11 @@ if args.encoder == 'roberta':
 elif args.encoder == 'bert':
     tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
     sep = '[SEP]'
-elif args.encoder == 'finbert':
-    tokenizer = BertTokenizer.from_pretrained(args.input_path + "/finbert")
+elif args.encoder == 'tapas':
+    from transformers import TapasTokenizer
+    from tag_op.data.tapas_dataset import TagTaTQAReader, TagTaTQATestReader
+    tokenizer = TapasTokenizer.from_pretrained(args.model_path + "/tapas.large")
+    tokenizer.add_special_tokens({'additional_special_tokens':['[OPT]']})
     sep = '[SEP]'
 
 
