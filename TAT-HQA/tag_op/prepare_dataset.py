@@ -1,7 +1,6 @@
 import os
 import pickle
 import argparse
-from data.tatqa_dataset import TagTaTQATestReader, TagTaTQAReader
 from transformers.models.roberta.tokenization_roberta import RobertaTokenizer
 
 from transformers.models.bert import BertTokenizer
@@ -21,6 +20,7 @@ parser.add_argument("--tapas_path", type=str, default='')
 args = parser.parse_args()
 
 if args.encoder == 'roberta':
+    from data.tatqa_dataset import TagTaTQATestReader, TagTaTQAReader
     # tokenizer = RobertaTokenizer.from_pretrained('roberta-large')
     tokenizer = RobertaTokenizer.from_pretrained(args.roberta_model)
     sep = '<s>'
