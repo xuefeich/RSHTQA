@@ -13,7 +13,7 @@ from data.data_util import get_op_3, get_arithmetic_op_index_3
 from data.data_util import OPERATOR_CLASSES_, IF_OPERATOR_CLASSES_, ARI_CLASSES_
 from tools.utils import create_logger, set_environment
 from data.tatqa_batch_gen import TaTQABatchGen, TaTQATestBatchGen
-from transformers import RobertaModel, BertModel
+from transformers import RobertaModel, BertModel,TapasModel
 from tagop.modeling_tagop_L2I import TagopModel
 from tools.model import TagopFineTuningModel
 
@@ -32,6 +32,7 @@ parser.add_argument("--share_param", type=int, default=1) # enable parameter sha
 parser.add_argument("--do_finetune", type=int, default=0) # fine tuning from --model_finetune_from? 1 true 0 false.
 parser.add_argument("--model_finetune_from", type=str, default='') # if do_finetune, input the path to checkpoint
 parser.add_argument("--num_ops", type=int, default=6)
+parser.add_argument("--tapas_path", type=str, default='')
 
 args = parser.parse_args()
 if args.ablation_mode != 0:
@@ -72,8 +73,8 @@ def main():
         bert_model = BertModel.from_pretrained('bert-large-uncased')
     elif args.encoder == 'roberta':
         bert_model = RobertaModel.from_pretrained(args.roberta_model)
-    elif args.encoder == 'finbert':
-        bert_model = BertModel.from_pretrained(args.finbert_model)
+    elif args.encoder == 'tapas':
+        bert_model = TapasModel.from_pretrained(args.tapas_path + "/tapas.large")
     
     bert_model.resize_token_embeddings(bert_model.config.vocab_size+1)
 
