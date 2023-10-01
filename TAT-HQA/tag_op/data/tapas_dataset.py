@@ -907,8 +907,9 @@ class TagTaTQAReader(object):
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
         self.question_length_limit = question_length_limit
-        self.sep = self.tokenizer._convert_token_to_id(sep)
-        self.opt = self.tokenizer.encode("<OPT>")[1]
+        self.sep = self.tokenizer.convert_tokens_to_ids(sep)
+        self.opt = self.tokenizer.convert_tokens_to_ids("[OPT]")
+        self.cls = self.tokenizer.convert_tokens_to_ids("[CLS]")
         self.skip_count = 0
         self.op_mode=op_mode
 
@@ -965,7 +966,7 @@ class TagTaTQAReader(object):
                 question_and_if_number_value, question_and_if_index, question_if_part_indicator, _= \
             question_if_part_tokenize(question_text, question_if_text, self.tokenizer, original_answer_mapping, if_mapping)
 
-        table_cell_tokens, table_ids, table_tags, table_if_tags, table_cell_number_value, table_cell_index, _ = table_tokenize(table, self.tokenizer, original_answer_mapping, if_mapping)
+        table_cell_tokens, table_ids, table_tags, table_if_tags, table_cell_number_value, table_cell_index, _, table_type_ids = table_tokenize(table, self.tokenizer, original_answer_mapping, if_mapping,question_and_if_number_value)
         paragraph_tokens, paragraph_ids, paragraph_tags, paragraph_if_tags, paragraph_word_piece_mask, paragraph_number_mask, \
                 paragraph_number_value, paragraph_index, _= paragraph_tokenize(question_text, paragraphs, self.tokenizer, original_answer_mapping, if_mapping)
                          
@@ -1082,7 +1083,7 @@ class TagTaTQAReader(object):
                          "paragraph_ids": paragraph_ids, "paragraph_tags": paragraph_tags, "paragraph_if_tags": paragraph_if_tags, "paragraph_index": paragraph_index,"paragraph_number_value": paragraph_number_value, "paragraph_tokens": paragraph_tokens,
                          "table_ids": table_ids, "table_tags": table_tags, "table_if_tags": table_if_tags, "table_cell_index": table_cell_index, "table_cell_number_value": table_cell_number_value,
                          "sep": self.sep,"question_length_limitation": self.question_length_limit, "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces,
-                         "opt":self.opt,"num_ops":self.num_ops,"ari_tags":ari_tags}
+                         "opt":self.opt,"num_ops":self.num_ops,"ari_tags":ari_tags,"cls",:self.cls,"table_type_ids":table_type_ids}
         
         input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
         table_mask, table_cell_number_value, table_cell_index, tags, if_tags, input_segments, opt_mask,ari_round_labels,question_mask = _concat(**concat_params)
@@ -1323,8 +1324,9 @@ class TagTaTQATestReader(object):
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
         self.question_length_limit = question_length_limit
-        self.sep = self.tokenizer._convert_token_to_id(sep)
-        self.opt = self.tokenizer.encode("<OPT>")[1]
+        self.sep = self.tokenizer.convert_tokens_to_ids(sep)
+        self.opt = self.tokenizer.convert_tokens_to_ids("[OPT]")
+        self.cls = self.tokenizer.convert_tokens_to_ids("[CLS]")
         tokens = self.tokenizer._tokenize("Feb 2 Nov")
         self.skip_count = 0
         self.mode = mode
@@ -1485,9 +1487,14 @@ class TagTaTQATestReader(object):
                           answer_type: str, answer:str, question_id:str, scale: str, original_answer_mapping,facts,original_derivation,counter_derivation):
         
         dummy_dict = {}
+
+        question_and_if_tokens, question_and_if_ids, _, _, _,_, \
+                question_and_if_number_value, question_and_if_index, question_if_part_indicator, _= \
+            question_if_part_tokenize(question_text, question_if_text, self.tokenizer, dummy_dict, dummy_dict)
+
         
-        table_cell_tokens, table_ids, _, _, table_cell_number_value, table_cell_index, _ = \
-                            table_tokenize(table, self.tokenizer, dummy_dict, dummy_dict)
+        table_cell_tokens, table_ids, _, _, table_cell_number_value, table_cell_index, _,table_type_ids = \
+                            table_tokenize(table, self.tokenizer, dummy_dict, dummy_dict,question_and_if_number_value)
 
         for i in range(len(table)):
             for j in range(len(table[i])):
@@ -1503,18 +1510,12 @@ class TagTaTQATestReader(object):
                 paragraph_number_value, paragraph_index, _= \
             paragraph_tokenize(question_text, paragraphs, self.tokenizer, dummy_dict, dummy_dict)
 
-
-
-        question_and_if_tokens, question_and_if_ids, _, _, _,_, \
-                question_and_if_number_value, question_and_if_index, question_if_part_indicator, _= \
-            question_if_part_tokenize(question_text, question_if_text, self.tokenizer, dummy_dict, dummy_dict)
-
         concat_params = {"question_and_if_ids": question_and_if_ids,"question_and_if_index": question_and_if_index, "question_if_part_indicator": question_if_part_indicator, 
                          "question_and_if_number_value": question_and_if_number_value, "question_and_if_tokens": question_and_if_tokens,
                          "paragraph_ids": paragraph_ids, "paragraph_index": paragraph_index,"paragraph_number_value": paragraph_number_value, "paragraph_tokens": paragraph_tokens,
                          "table_ids": table_ids,  "table_cell_index": table_cell_index, "table_cell_number_value": table_cell_number_value,
                          "sep": self.sep, "question_length_limitation": self.question_length_limit, 
-                         "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces,"opt":self.opt,"num_ops":self.num_ops}
+                         "passage_length_limitation": self.passage_length_limit, "max_pieces": self.max_pieces,"opt":self.opt,"num_ops":self.num_ops,"table_type_ids":table_type_ids,"cls":self.cls}
 
         input_ids, qtp_attention_mask, question_if_part_attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, paragraph_tokens, \
         table_mask, table_cell_number_value, table_cell_index, input_segments,opt_mask,question_mask = _test_concat(**concat_params)
